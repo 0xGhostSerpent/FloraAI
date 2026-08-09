@@ -24,7 +24,8 @@
     "noEmit": true,
     "types": [
       "vite/client"
-    ]
+    ],
+    "strictNullChecks": true
   },
   "include": [
     "src",

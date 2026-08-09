@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { Camera, Leaf, Upload, Settings as SettingsIcon, ChevronLeft, Send, Sparkles, X, CreditCard, LogIn, LogOut, Shield, Cloud, Lock, Unlock, CheckCircle2, History, Info, Sun, Gamepad2, Cpu, ScanLine, AlertTriangle } from 'lucide-react';
+import { useState, useRef, useEffect, type ChangeEvent } from 'react';
+import { Camera, Leaf, Settings as SettingsIcon, ChevronLeft, Send, LogIn, LogOut, Shield, Cloud, Lock, Unlock, CheckCircle2, History, Info, Sun, Gamepad2, Cpu, ScanLine, AlertTriangle, Store } from 'lucide-react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, signInWithGoogle, logout } from './firebase';
@@ -33,8 +33,6 @@ export default function App() {
   // App Config State
   const [hasOnboarded, setHasOnboarded] = useState(false);
   const [userApiKey, setUserApiKey] = useState('');
-  const [installDate, setInstallDate] = useState<number | null>(null);
-  const [isPremium, setIsPremium] = useState(false);
   const [appTheme, setAppTheme] = useState('theme-minimalist');
   
   // Data State
@@ -44,7 +42,7 @@ export default function App() {
   const [lastCheckInDate, setLastCheckInDate] = useState<string | null>(null);
 
   // UI Navigation State
-  const [currentScreen, setCurrentScreen] = useState<'home' | 'scanner' | 'paywall' | 'settings' | 'chat' | 'history'>('home');
+  const [currentScreen, setCurrentScreen] = useState<'home' | 'scanner' | 'settings' | 'chat' | 'history' | 'nurseries'>('home');
   const [activePlantDetails, setActivePlantDetails] = useState<PlantData | null>(null);
   
   // Scanner State
@@ -68,18 +66,9 @@ export default function App() {
       // Local Storage Configs
       const onboarded = localStorage.getItem('flora_onboarded') === 'true';
       const key = localStorage.getItem('flora_api_key') || '';
-      const premium = localStorage.getItem('flora_premium') === 'true';
-      
-      let iDate = localStorage.getItem('flora_install_date');
-      if (!iDate && onboarded) {
-          iDate = Date.now().toString();
-          localStorage.setItem('flora_install_date', iDate);
-      }
 
       setHasOnboarded(onboarded);
       setUserApiKey(key);
-      setIsPremium(premium);
-      setInstallDate(iDate ? parseInt(iDate) : null);
 
       // IndexedDB Data
       const p = await getPlants();
@@ -132,39 +121,11 @@ export default function App() {
   const completeOnboarding = () => {
       setHasOnboarded(true);
       localStorage.setItem('flora_onboarded', 'true');
-      const now = Date.now();
-      setInstallDate(now);
-      localStorage.setItem('flora_install_date', now.toString());
   };
 
-  const [cardDetails, setCardDetails] = useState({ number: '', exp: '', cvc: '' });
-  const handlePaywallSuccess = () => {
-      if (cardDetails.number && cardDetails.exp && cardDetails.cvc) {
-        setIsPremium(true);
-        localStorage.setItem('flora_premium', 'true');
-        setCurrentScreen('home');
-        triggerDriveSync();
-      } else {
-        alert("Please enter mock card details.");
-      }
-  };
-
-  // Trial Logic
-  const getIsTrialActive = () => {
-      if (!installDate) return true;
-      const daysSinceInstall = (Date.now() - installDate) / (1000 * 60 * 60 * 24);
-      return daysSinceInstall <= 7;
-  };
-
-  const canAccessApp = isPremium || getIsTrialActive();
-
-  const handleCameraCapture = (e: React.ChangeEvent<HTMLInputElement>, mode: 'new_plant' | 'check_in' = 'new_plant') => {
+  const handleCameraCapture = (e: ChangeEvent<HTMLInputElement>, mode: 'new_plant' | 'check_in' = 'new_plant') => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!canAccessApp) {
-        setCurrentScreen('paywall');
-        return;
-      }
       setScanMode(mode);
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -381,11 +342,6 @@ export default function App() {
     return <div className="min-h-screen bg-black flex items-center justify-center"><div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div></div>;
   }
 
-  // Enforce Paywall
-  if (hasOnboarded && !canAccessApp && currentScreen !== 'paywall') {
-      setCurrentScreen('paywall');
-  }
-
   const renderStreakIcon = () => {
       if (appTheme === 'theme-gamified') {
           return <span className="font-black text-xs px-2 py-1 bg-gradient-to-r from-yellow-400 to-yellow-600 text-black rounded-lg">Lvl {streak}</span>;
@@ -455,7 +411,7 @@ export default function App() {
                              <ChevronLeft size={24} className="text-text-main" />
                          </button>
                          <h2 className="text-xl font-bold text-text-main capitalize">
-                            {currentScreen === 'paywall' ? 'Flora Premium' : currentScreen === 'settings' ? 'Settings' : currentScreen}
+                            {currentScreen === 'settings' ? 'Settings' : currentScreen}
                          </h2>
                     </div>
                 )}
@@ -691,32 +647,6 @@ export default function App() {
                       </motion.div>
                     )}
 
-                    {currentScreen === 'paywall' && (
-                      <motion.div key="paywall" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="px-6 pb-6 flex flex-col items-center flex-1 h-full text-center relative z-20 pt-4">
-                        <div className="w-20 h-20 bg-[var(--color-accent)] rounded-3xl flex items-center justify-center shadow-lg mb-6 text-bg-main">
-                          <Sparkles size={36} />
-                        </div>
-                        <h2 className="text-4xl font-bold mb-2 tracking-tight">Flora Premium</h2>
-                        <p className="text-text-muted mb-8 px-2 text-sm leading-relaxed font-medium">Your 7-day trial has ended. Subscribe for $1.99/month to keep your garden alive, sync to Google Drive, and chat with your plants.</p>
-                        
-                        {/* Native Stripe-style UI mockup */}
-                        <div className="w-full bg-bg-card dynamic-border rounded-[var(--radius-dynamic)] p-5 text-left mb-8 shadow-sm">
-                            <div className="flex items-center gap-2 mb-6 text-text-muted text-xs uppercase tracking-widest font-bold">
-                                <CreditCard size={14} /> Secure Checkout
-                            </div>
-                            <input value={cardDetails.number} onChange={e=>setCardDetails({...cardDetails, number:e.target.value})} placeholder="Card number" className="w-full bg-bg-main border border-text-muted/20 rounded-xl px-4 py-3 text-sm mb-3 font-mono focus:outline-none focus:border-[var(--color-accent)] text-text-main" />
-                            <div className="flex gap-3">
-                                <input value={cardDetails.exp} onChange={e=>setCardDetails({...cardDetails, exp:e.target.value})} placeholder="MM / YY" className="w-1/2 bg-bg-main border border-text-muted/20 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-[var(--color-accent)] text-text-main" />
-                                <input value={cardDetails.cvc} onChange={e=>setCardDetails({...cardDetails, cvc:e.target.value})} placeholder="CVC" className="w-1/2 bg-bg-main border border-text-muted/20 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-[var(--color-accent)] text-text-main" type="password" />
-                            </div>
-                        </div>
-
-                        <button onClick={handlePaywallSuccess} className="w-full bg-[var(--color-accent)] text-bg-main py-4 rounded-[var(--radius-dynamic)] font-bold shadow-lg active:scale-95 transition-transform text-lg mt-auto">
-                          Subscribe $1.99/mo
-                        </button>
-                      </motion.div>
-                    )}
-
                     {currentScreen === 'settings' && (
                       <motion.div key="settings" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="px-6 pb-6 space-y-6 pt-2">
                         
@@ -761,11 +691,6 @@ export default function App() {
                         </div>
 
                         <div className="space-y-3 pt-4">
-                            {!getIsTrialActive() && !isPremium && (
-                                <button onClick={() => setCurrentScreen('paywall')} className="w-full bg-[var(--color-accent)] text-bg-main py-4 rounded-xl font-bold shadow-lg">
-                                    Upgrade to Premium
-                                </button>
-                            )}
                             <button onClick={() => {
                                  if(confirm('Log out and wipe local data?')) {
                                      logout();
@@ -783,7 +708,7 @@ export default function App() {
                 </main>
 
                 {/* BOTTOM NAVIGATION */}
-                {currentScreen !== 'scanner' && currentScreen !== 'paywall' && currentScreen !== 'history' && (
+                {currentScreen !== 'scanner' && currentScreen !== 'history' && (
                     <nav className="absolute bottom-0 w-full bg-bg-card/90 backdrop-blur-md border-t border-[var(--color-accent)]/20 pb-safe pt-2 px-10 flex justify-between h-[90px] items-start pt-4 z-40">
                     <button onClick={() => setCurrentScreen('home')} className={`flex flex-col items-center gap-1.5 w-16 transition-colors ${currentScreen === 'home' || currentScreen === 'settings' ? 'text-[var(--color-accent)]' : 'text-text-muted hover:text-text-main'}`}>
                         <Leaf size={24} strokeWidth={2.5} />
@@ -795,9 +720,9 @@ export default function App() {
                         <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleCameraCapture(e, 'new_plant')} />
                     </label>
 
-                    <button onClick={() => setCurrentScreen('paywall')} className={`flex flex-col items-center gap-1.5 w-16 transition-colors ${currentScreen === 'paywall' ? 'text-[var(--color-accent)]' : 'text-text-muted hover:text-text-main'}`}>
-                        <Sparkles size={24} strokeWidth={2.5} />
-                        <span className="text-[10px] font-bold uppercase tracking-wider">Pro</span>
+                    <button onClick={() => setCurrentScreen('nurseries')} className={`flex flex-col items-center gap-1.5 w-16 transition-colors ${currentScreen === 'nurseries' ? 'text-[var(--color-accent)]' : 'text-text-muted hover:text-text-main'}`}>
+                        <Store size={24} strokeWidth={2.5} />
+                        <span className="text-[10px] font-bold uppercase tracking-wider">Nurseries</span>
                     </button>
                     </nav>
                 )}

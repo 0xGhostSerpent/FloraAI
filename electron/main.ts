@@ -2,6 +2,10 @@ import { app, BrowserWindow, ipcMain, session, shell } from 'electron';
 import * as path from 'node:path';
 import { deleteSecret, isEncryptionAvailable, readSecret, writeSecret } from './services/secrets';
 import { isConfigured, signIn } from './services/oauth';
+import { geocodeQuery, locateByIp } from './services/geocode';
+import { findNurseries } from './services/nurseries';
+import { findOccurrences, matchSpecies } from './services/gbif';
+import type { Coord } from './services/geo';
 
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 const isDev = Boolean(DEV_SERVER_URL);
@@ -99,6 +103,40 @@ function registerIpc(): void {
 
   ipcMain.handle('flora:auth:signIn', () => signIn());
   ipcMain.handle('flora:auth:isConfigured', () => isConfigured());
+
+  ipcMain.handle('flora:geocode', (_event, query: unknown) =>
+    typeof query === 'string' && query.trim()
+      ? geocodeQuery(query.trim())
+      : { ok: false, error: { code: 'GEOCODE_NONE', message: 'Enter a city or postcode.' } },
+  );
+
+  ipcMain.handle('flora:locateByIp', () => locateByIp());
+
+  ipcMain.handle('flora:findNurseries', (_event, opts: unknown) => {
+    const { lat, lon, radiusKm } = (opts ?? {}) as Partial<{
+      lat: number;
+      lon: number;
+      radiusKm: number;
+    }>;
+    if (typeof lat !== 'number' || typeof lon !== 'number') {
+      return { ok: false, error: { code: 'GEOCODE_NONE', message: 'No location set.' } };
+    }
+    return findNurseries({ lat, lon, radiusKm: radiusKm ?? 15 });
+  });
+
+  ipcMain.handle('flora:gbifMatch', (_event, name: unknown) =>
+    typeof name === 'string' && name.trim()
+      ? matchSpecies(name.trim())
+      : { ok: false, error: { code: 'SPECIES_NO_MATCH', message: 'No species name available.' } },
+  );
+
+  ipcMain.handle('flora:gbifOccurrences', (_event, payload: unknown) => {
+    const { taxonKey, origin } = (payload ?? {}) as { taxonKey?: number; origin?: Coord };
+    if (typeof taxonKey !== 'number') {
+      return { ok: false, error: { code: 'SPECIES_NO_MATCH', message: 'No species key.' } };
+    }
+    return findOccurrences(taxonKey, origin);
+  });
 }
 
 void app.whenReady().then(() => {

@@ -14,4 +14,11 @@ contextBridge.exposeInMainWorld('flora', {
     signIn: () => invoke<unknown>('flora:auth:signIn'),
     isConfigured: () => invoke<boolean>('flora:auth:isConfigured'),
   },
+  geocode: (query: string) => invoke<unknown>('flora:geocode', query),
+  locateByIp: () => invoke<unknown>('flora:locateByIp'),
+  findNurseries: (opts: { lat: number; lon: number; radiusKm: number }) =>
+    invoke<unknown>('flora:findNurseries', opts),
+  gbifMatch: (name: string) => invoke<unknown>('flora:gbifMatch', name),
+  gbifOccurrences: (taxonKey: number, origin?: { lat: number; lon: number }) =>
+    invoke<unknown>('flora:gbifOccurrences', { taxonKey, origin }),
 });

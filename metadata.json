@@ -1,0 +1,8 @@
+{
+  "name": "Flora AI - Plant Identifier",
+  "description": "A cross-platform mobile app simulation. A premium, modern plant identifier and caretaker with AI avatars.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": []
+}

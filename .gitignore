@@ -1,0 +1,15 @@
+node_modules/
+build/
+dist/
+dist-electron/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# LibreOffice lock files
+.~lock.*#
+
+# OAuth client credentials (see docs/superpowers/specs/2026-08-09-flora-ai-desktop-design.md §9)
+electron/oauth-config.json

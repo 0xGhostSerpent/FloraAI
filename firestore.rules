@@ -1,0 +1,125 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false; // Default-deny catch-all
+    }
+
+    // --- PRIMITIVE HELPERS ---
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    function isUserVerified() { return request.auth.token.email_verified == true; }
+    
+    // Allow unverified emails for Google Sign In initially if not strictly verified, 
+    // but in a real app would be strict. Since this is an AI demo, we will check if the auth object exists.
+    // However, the rule requires `request.auth.token.email_verified == true` for standard writes unless anonymous.
+    // Let's use it strictly.
+    // Wait, the guidelines say: "For all standard write operations (unless the app explicitly supports anonymous users), you MUST strictly mandate that the user is verified using request.auth.token.email_verified == true."
+    function isVerifiedUser() { return isSignedIn() && request.auth.token.email_verified == true; }
+
+    // --- ENTITY VALIDATION HELPERS ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['userId', 'email', 'scansCount', 'isPremium', 'createdAt']) &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.userId == request.auth.uid &&
+             data.email is string && data.email.size() <= 256 &&
+             data.scansCount is number &&
+             data.isPremium is bool &&
+             data.createdAt == request.time;
+    }
+
+    function isValidUserUpdate(action) {
+      return (
+        action == 'update_scans' && incoming().diff(existing()).affectedKeys().hasOnly(['scansCount', 'updatedAt']) &&
+        incoming().scansCount is number &&
+        incoming().updatedAt == request.time
+      ) || (
+        action == 'update_premium' && incoming().diff(existing()).affectedKeys().hasOnly(['isPremium', 'updatedAt']) &&
+        incoming().isPremium is bool &&
+        incoming().updatedAt == request.time
+      ) || (
+        action == 'update_api_key' && incoming().diff(existing()).affectedKeys().hasOnly(['customApiKey', 'updatedAt']) &&
+        incoming().customApiKey is string && incoming().customApiKey.size() <= 256 &&
+        incoming().updatedAt == request.time
+      );
+    }
+
+    function isValidPlant(data) {
+      // NOTE: imageUrl can be base64 and large. Max size constraint relaxed a bit.
+      return data.keys().hasAll(['userId', 'name', 'careInstructions', 'healthStatus', 'personality', 'imageUrl', 'timestamp']) &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.name is string && data.name.size() <= 100 &&
+             data.careInstructions is string && data.careInstructions.size() <= 1000 &&
+             data.healthStatus is string && data.healthStatus.size() <= 1000 &&
+             data.personality is string && data.personality.size() <= 1000 &&
+             data.imageUrl is string && data.imageUrl.size() <= 1048487 &&
+             data.timestamp is number;
+    }
+    
+    function isValidChatMessage(data, plantId) {
+      return data.keys().hasAll(['plantId', 'userId', 'role', 'text', 'timestamp']) &&
+             data.plantId is string && data.plantId == plantId &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.role is string && data.role.size() <= 10 && (data.role == 'user' || data.role == 'model') &&
+             data.text is string && data.text.size() <= 4000 &&
+             data.timestamp is number;
+    }
+
+    // --- RULES ---
+
+    match /users/{userId} {
+      allow get: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if isVerifiedUser() && resource.data.userId == request.auth.uid;
+      
+      allow create: if isVerifiedUser() && isValidId(userId) && 
+        userId == request.auth.uid && 
+        isValidUser(incoming());
+
+      allow update: if isVerifiedUser() && isValidId(userId) && 
+        userId == request.auth.uid &&
+        existing().userId == request.auth.uid &&
+        incoming().userId == existing().userId &&
+        existing().email == incoming().email &&
+        existing().createdAt == incoming().createdAt &&
+        isValidUserUpdate('update_scans') || isValidUserUpdate('update_premium') || isValidUserUpdate('update_api_key');
+        
+      allow delete: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId;
+    }
+
+    match /plants/{plantId} {
+      allow get: if isVerifiedUser() && isValidId(plantId) && resource.data.userId == request.auth.uid;
+      allow list: if isVerifiedUser() && resource.data.userId == request.auth.uid;
+
+      allow create: if isVerifiedUser() && isValidId(plantId) && 
+        isValidPlant(incoming()) &&
+        // Atomicity check: Ensure the user's document exists (Relational Sync)
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+        
+      allow update: if isVerifiedUser() && isValidId(plantId) &&
+        existing().userId == request.auth.uid &&
+        incoming().userId == existing().userId &&
+        isValidPlant(incoming()) &&
+        // Allow updates only to specific fields
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'careInstructions', 'healthStatus', 'personality', 'imageUrl', 'timestamp']);
+        
+      allow delete: if isVerifiedUser() && isValidId(plantId) && existing().userId == request.auth.uid;
+
+      // Subcollection for chat messages
+      match /messages/{messageId} {
+        allow get: if isVerifiedUser() && isValidId(messageId) && isValidId(plantId) && resource.data.userId == request.auth.uid;
+        allow list: if isVerifiedUser() && isValidId(plantId) && resource.data.userId == request.auth.uid;
+        
+        allow create: if isVerifiedUser() && isValidId(messageId) && isValidId(plantId) &&
+          isValidChatMessage(incoming(), plantId) &&
+          // Verify user actually owns the parent plant
+          get(/databases/$(database)/documents/plants/$(plantId)).data.userId == request.auth.uid;
+          
+        allow update: if false; // Chat messages are immutable
+        allow delete: if isVerifiedUser() && isValidId(messageId) && isValidId(plantId) && existing().userId == request.auth.uid;
+      }
+    }
+  }
+}

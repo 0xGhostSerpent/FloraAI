@@ -1,0 +1,80 @@
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Nunito:ital,wght@0,200..1000;1,200..1000&family=Fira+Code:wght@300..700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-bg-main: var(--bg-primary);
+  --color-bg-card: var(--bg-secondary);
+  --color-accent: var(--accent-primary);
+  --color-accent-alt: var(--accent-secondary);
+  --color-text-main: var(--text-primary);
+  --color-text-muted: var(--text-secondary);
+  --font-dynamic: var(--font-main);
+  --radius-dynamic: var(--border-radius);
+}
+
+:root, .theme-minimalist {
+  --bg-primary: #FAF9F6;
+  --bg-secondary: #FFFFFF;
+  --accent-primary: #6B8E23;
+  --accent-secondary: #E2725B;
+  --text-primary: #2C3E2D;
+  --text-secondary: #6B8E23;
+  --font-main: 'Lora', serif;
+  --border-radius: 16px;
+  --border-style: 1px solid rgba(107, 142, 35, 0.3);
+}
+
+.theme-gamified {
+  --bg-primary: #FFFACD;
+  --bg-secondary: #FFFFFF;
+  --accent-primary: #FF69B4;
+  --accent-secondary: #00BFFF;
+  --text-primary: #000000;
+  --text-secondary: #555555;
+  --font-main: 'Nunito', sans-serif;
+  --border-radius: 24px;
+  --border-style: 3px solid #000000;
+}
+
+.theme-cyber {
+  --bg-primary: #000000;
+  --bg-secondary: #0A0A1A;
+  --accent-primary: #39FF14;
+  --accent-secondary: #8A2BE2;
+  --text-primary: #39FF14;
+  --text-secondary: #8A2BE2;
+  --font-main: 'Fira Code', monospace;
+  --border-radius: 0px;
+  --border-style: 1px solid var(--accent-primary);
+}
+
+body {
+  @apply bg-bg-main text-text-main m-0 p-0 font-dynamic transition-colors duration-300;
+}
+
+.dynamic-border {
+  border: var(--border-style);
+}
+
+.dynamic-shadow {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+}
+
+.theme-gamified .dynamic-shadow {
+  box-shadow: 4px 4px 0px #000000;
+}
+
+.theme-cyber .dynamic-shadow {
+  box-shadow: 0 0 10px rgba(57, 255, 20, 0.2);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--accent-primary);
+  border-radius: var(--border-radius);
+}

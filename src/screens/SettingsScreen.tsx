@@ -1,5 +1,6 @@
 import { CheckCircle2, Cpu, Gamepad2, Lock, LogOut, Sun } from 'lucide-react';
 import { motion } from 'motion/react';
+import ErrorCard from '../components/ErrorCard';
 
 const THEMES = [
   { id: 'theme-minimalist', name: 'Botanical Minimalist', icon: Sun },
@@ -10,6 +11,7 @@ const THEMES = [
 type Props = {
   apiKey: string;
   appTheme: string;
+  keyStoreError: string | null;
   onChangeApiKey: (value: string) => void;
   onChangeTheme: (theme: string) => void;
   onReset: () => void;
@@ -18,6 +20,7 @@ type Props = {
 export default function SettingsScreen({
   apiKey,
   appTheme,
+  keyStoreError,
   onChangeApiKey,
   onChangeTheme,
   onReset,
@@ -44,11 +47,12 @@ export default function SettingsScreen({
             placeholder="AIzaSy..."
             className="w-full bg-bg-main border border-text-muted/20 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--color-accent)] font-mono text-text-main"
           />
-          {apiKey && (
+          {apiKey && !keyStoreError && (
             <div className="flex items-center gap-2 text-xs text-[var(--color-accent)] font-bold">
               <CheckCircle2 size={12} /> Key saved
             </div>
           )}
+          {keyStoreError && <ErrorCard message={keyStoreError} />}
         </div>
       </div>
 

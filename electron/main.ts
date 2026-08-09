@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, session, shell } from 'electron';
 import * as path from 'node:path';
+import { deleteSecret, isEncryptionAvailable, readSecret, writeSecret } from './services/secrets';
 
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 const isDev = Boolean(DEV_SERVER_URL);
@@ -77,6 +78,22 @@ function registerIpc(): void {
   ipcMain.handle('flora:openExternal', async (_event, url: unknown) => {
     if (typeof url !== 'string' || !url.startsWith('https://')) return;
     await shell.openExternal(url);
+  });
+
+  ipcMain.handle('flora:secrets:get', (_event, name: unknown) =>
+    typeof name === 'string' ? readSecret(name) : null,
+  );
+
+  ipcMain.handle('flora:secrets:set', (_event, payload: unknown) => {
+    const { name, value } = (payload ?? {}) as { name?: string; value?: string };
+    if (typeof name !== 'string' || typeof value !== 'string') return false;
+    if (!isEncryptionAvailable()) return false;
+    writeSecret(name, value);
+    return true;
+  });
+
+  ipcMain.handle('flora:secrets:clear', (_event, name: unknown) => {
+    if (typeof name === 'string') deleteSecret(name);
   });
 }
 

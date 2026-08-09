@@ -24,6 +24,8 @@ import SettingsScreen from './screens/SettingsScreen';
 
 type Screen = 'home' | 'scanner' | 'settings' | 'chat' | 'history' | 'nurseries';
 
+const API_KEY_SECRET = 'gemini_api_key';
+
 const getAiInstance = (apiKey?: string) =>
   new GoogleGenAI({ apiKey: apiKey || import.meta.env.VITE_GEMINI_API_KEY });
 
@@ -61,7 +63,15 @@ export default function App() {
   useEffect(() => {
     const initApp = async () => {
       const onboarded = localStorage.getItem('flora_onboarded') === 'true';
-      const key = localStorage.getItem('flora_api_key') || '';
+
+      // One-time migration: the key used to sit in plaintext localStorage,
+      // which on a desktop app is a readable file on disk.
+      const legacyKey = localStorage.getItem('flora_api_key');
+      if (legacyKey) {
+        await window.flora.secrets.set(API_KEY_SECRET, legacyKey);
+        localStorage.removeItem('flora_api_key');
+      }
+      const key = (await window.flora.secrets.get(API_KEY_SECRET)) ?? '';
 
       setHasOnboarded(onboarded);
       setUserApiKey(key);
@@ -97,9 +107,19 @@ export default function App() {
     await saveConfig({ theme: newTheme });
   };
 
-  const changeApiKey = (value: string) => {
+  const [keyStoreError, setKeyStoreError] = useState<string | null>(null);
+
+  const changeApiKey = async (value: string) => {
     setUserApiKey(value);
-    localStorage.setItem('flora_api_key', value);
+    if (!value) {
+      await window.flora.secrets.clear(API_KEY_SECRET);
+      setKeyStoreError(null);
+      return;
+    }
+    const stored = await window.flora.secrets.set(API_KEY_SECRET, value);
+    setKeyStoreError(
+      stored ? null : 'Your system keychain is unavailable, so the key will not persist after you quit.',
+    );
   };
 
   const completeOnboarding = () => {
@@ -353,8 +373,9 @@ export default function App() {
     }
   };
 
-  const resetLocalData = () => {
+  const resetLocalData = async () => {
     if (!confirm('Reset Flora AI and wipe local data on this computer?')) return;
+    await window.flora.secrets.clear(API_KEY_SECRET);
     localStorage.clear();
     window.location.reload();
   };
@@ -449,6 +470,7 @@ export default function App() {
                     key="settings"
                     apiKey={userApiKey}
                     appTheme={appTheme}
+                    keyStoreError={keyStoreError}
                     onChangeApiKey={changeApiKey}
                     onChangeTheme={updateTheme}
                     onReset={resetLocalData}

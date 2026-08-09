@@ -305,9 +305,10 @@ export default function App() {
         const openingMsg = (scanResult as any).openingMessage;
         if (openingMsg) {
              const currentHistory = chatHistory[activePlantDetails.id] || [];
-             const finalHistory = [...currentHistory, { id: Date.now().toString(), role: 'model', text: openingMsg, timestamp: Date.now() }];
+             const openingEntry: ChatMessage = { id: Date.now().toString(), role: 'model', text: openingMsg, timestamp: Date.now() };
+             const finalHistory: ChatMessage[] = [...currentHistory, openingEntry];
              setChatHistory(prev => ({ ...prev, [activePlantDetails.id]: finalHistory }));
-             await saveChatHistory(activePlantDetails.id, finalHistory as any);
+             await saveChatHistory(activePlantDetails.id, finalHistory);
         }
     }
     

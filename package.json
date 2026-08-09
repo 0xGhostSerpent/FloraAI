@@ -42,7 +42,8 @@
         "AppImage",
         "deb"
       ],
-      "category": "Education"
+      "category": "Education",
+      "maintainer": "Sadman Tanim <sadmantanimsowad@gmail.com>"
     },
     "win": {
       "target": [
@@ -82,5 +83,11 @@
     "vite": "^6.2.3",
     "vitest": "^3.2.7",
     "wait-on": "^8.0.5"
-  }
+  },
+  "description": "AI plant identification, care tracking, and nursery finder desktop app",
+  "author": {
+    "name": "Sadman Tanim",
+    "email": "sadmantanimsowad@gmail.com"
+  },
+  "homepage": "https://ai.studio/apps/6f59e9da-870d-449d-a3b0-3c7de1492d16"
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ChangeEvent } from 'react';
-import { Camera, History, Lock, Send } from 'lucide-react';
+import { Activity, Camera, History, Lock, MapPin, Send, Store } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { ChatMessage, PlantData } from '../store';
 import { getTodayDateId } from '../lib/dates';
@@ -14,6 +14,9 @@ type Props = {
   onSend: () => void;
   onOpenHistory: () => void;
   onCheckInPhoto: (e: ChangeEvent<HTMLInputElement>) => void;
+  onPlantStatus: () => void;
+  onWhereToBuy: () => void;
+  onFindInWild: () => void;
 };
 
 export default function ChatScreen({
@@ -26,6 +29,9 @@ export default function ChatScreen({
   onSend,
   onOpenHistory,
   onCheckInPhoto,
+  onPlantStatus,
+  onWhereToBuy,
+  onFindInWild,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -55,6 +61,24 @@ export default function ChatScreen({
         >
           <History size={18} />
         </button>
+      </div>
+
+      {/* The same actions offered at capture time, for a plant already saved. */}
+      <div className="flex gap-2 mb-4">
+        {[
+          { label: 'Status', icon: Activity, onClick: onPlantStatus },
+          { label: 'Buy', icon: Store, onClick: onWhereToBuy },
+          { label: 'In the wild', icon: MapPin, onClick: onFindInWild },
+        ].map(({ label, icon: Icon, onClick }) => (
+          <button
+            key={label}
+            onClick={onClick}
+            className="flex-1 bg-bg-card dynamic-border rounded-xl py-2 flex flex-col items-center gap-1 text-text-muted hover:text-[var(--color-accent)] transition-colors"
+          >
+            <Icon size={15} />
+            <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
+          </button>
+        ))}
       </div>
 
       <div className="flex-1 bg-bg-card dynamic-border rounded-t-[var(--radius-dynamic)] overflow-hidden border-b-0 p-4 flex flex-col shadow-sm">

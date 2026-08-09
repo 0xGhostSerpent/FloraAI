@@ -1,0 +1,5 @@
+{
+  "_comment": "Copy this file to oauth-config.json and fill in real values. Create an OAuth client of type 'Desktop app' in the Google Cloud console, in the same project as firebase-applet-config.json. For installed apps this secret is NOT confidential - it ships inside the binary and is extractable. PKCE, not the secret, is what protects the exchange. If this file is absent the app still runs; sign-in is simply disabled.",
+  "clientId": "REPLACE_ME.apps.googleusercontent.com",
+  "clientSecret": "REPLACE_ME"
+}

@@ -10,4 +10,8 @@ contextBridge.exposeInMainWorld('flora', {
     set: (name: string, value: string) => invoke<boolean>('flora:secrets:set', { name, value }),
     clear: (name: string) => invoke<void>('flora:secrets:clear', name),
   },
+  auth: {
+    signIn: () => invoke<unknown>('flora:auth:signIn'),
+    isConfigured: () => invoke<boolean>('flora:auth:isConfigured'),
+  },
 });

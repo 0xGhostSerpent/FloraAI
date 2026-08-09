@@ -2,7 +2,7 @@ import { useState, useEffect, type ChangeEvent } from 'react';
 import { ChevronLeft, Leaf, ScanLine, Store } from 'lucide-react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { AnimatePresence } from 'motion/react';
-import { auth } from './firebase';
+import { auth, logout, signInWithGoogleDesktop } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import {
   getPlants,
@@ -31,7 +31,12 @@ const getAiInstance = (apiKey?: string) =>
 
 export default function App() {
   const [isInitializing, setIsInitializing] = useState(true);
-  const [, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  // Auth
+  const [authConfigured, setAuthConfigured] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   // App config
   const [hasOnboarded, setHasOnboarded] = useState(false);
@@ -88,6 +93,8 @@ export default function App() {
       setStreak(currentStreak);
       setLastCheckInDate(lastCheckIn);
       setAppTheme(config.theme || 'theme-minimalist');
+
+      setAuthConfigured(await window.flora.auth.isConfigured());
 
       onAuthStateChanged(auth, (user) => {
         setCurrentUser(user);
@@ -373,6 +380,22 @@ export default function App() {
     }
   };
 
+  const handleSignIn = async () => {
+    setAuthError(null);
+    setIsSigningIn(true);
+    const result = await signInWithGoogleDesktop();
+    // Cancelling is a normal choice, not an error worth surfacing.
+    if (!result.ok && result.error.code !== 'OAUTH_CANCELLED') {
+      setAuthError(result.error.message);
+    }
+    setIsSigningIn(false);
+  };
+
+  const handleSignOut = async () => {
+    await logout();
+    setAuthError(null);
+  };
+
   const resetLocalData = async () => {
     if (!confirm('Reset Flora AI and wipe local data on this computer?')) return;
     await window.flora.secrets.clear(API_KEY_SECRET);
@@ -471,6 +494,12 @@ export default function App() {
                     apiKey={userApiKey}
                     appTheme={appTheme}
                     keyStoreError={keyStoreError}
+                    currentUser={currentUser}
+                    authConfigured={authConfigured}
+                    authError={authError}
+                    isSigningIn={isSigningIn}
+                    onSignIn={handleSignIn}
+                    onSignOut={handleSignOut}
                     onChangeApiKey={changeApiKey}
                     onChangeTheme={updateTheme}
                     onReset={resetLocalData}

@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "Plant": {
+      "title": "Plant",
+      "description": "A scanned plant saved to the user's virtual garden",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "careInstructions": { "type": "string" },
+        "healthStatus": { "type": "string" },
+        "personality": { "type": "string" },
+        "imageUrl": { "type": "string", "description": "Base64 string or URL" },
+        "dateScanned": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["userId", "name", "careInstructions", "healthStatus", "personality", "imageUrl", "timestamp"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile with their settings",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "scansCount": { "type": "number" },
+        "customApiKey": { "type": "string" },
+        "isPremium": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "email", "scansCount", "isPremium", "createdAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A chat message history belonging to a specific plant",
+      "type": "object",
+      "properties": {
+        "plantId": { "type": "string" },
+        "userId": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "model"] },
+        "text": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["plantId", "userId", "role", "text", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile and settings"
+    },
+    "/plants/{plantId}": {
+      "schema": { "$ref": "#/entities/Plant" },
+      "description": "User's scanned plants"
+    },
+    "/plants/{plantId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Chat messages with this plant"
+    }
+  }
+}

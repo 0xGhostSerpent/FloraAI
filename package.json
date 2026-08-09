@@ -12,7 +12,7 @@
     "build": "vite build && npm run build:main",
     "preview": "vite preview",
     "clean": "rm -rf dist dist-electron release server.js",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && tsc -p electron/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "dist:linux": "npm run build && electron-builder --linux AppImage deb",
@@ -27,6 +27,15 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "electron/",
+        "to": ".",
+        "filter": [
+          "oauth-config.json"
+        ]
+      }
     ],
     "linux": {
       "target": [

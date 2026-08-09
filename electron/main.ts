@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, session, shell } from 'electron';
 import * as path from 'node:path';
 import { deleteSecret, isEncryptionAvailable, readSecret, writeSecret } from './services/secrets';
+import { isConfigured, signIn } from './services/oauth';
 
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 const isDev = Boolean(DEV_SERVER_URL);
@@ -95,6 +96,9 @@ function registerIpc(): void {
   ipcMain.handle('flora:secrets:clear', (_event, name: unknown) => {
     if (typeof name === 'string') deleteSecret(name);
   });
+
+  ipcMain.handle('flora:auth:signIn', () => signIn());
+  ipcMain.handle('flora:auth:isConfigured', () => isConfigured());
 }
 
 void app.whenReady().then(() => {

@@ -1,6 +1,5 @@
 import { useState, useEffect, type ChangeEvent } from 'react';
 import { ChevronLeft, Leaf, ScanLine, Store } from 'lucide-react';
-import { GoogleGenAI, Type } from '@google/genai';
 import { AnimatePresence } from 'motion/react';
 import { auth, logout, signInWithGoogleDesktop } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -14,7 +13,35 @@ import {
   PlantData,
   ChatMessage,
 } from './store';
+import {
+  getUserLocation,
+  saveUserLocation,
+  getPriceEstimate,
+  savePriceEstimate,
+  getCachedNurseries,
+  saveCachedNurseries,
+  nurseryCacheKey,
+  type Nursery,
+  type OccurrenceSet,
+  type PlantStatus,
+  type PriceEstimate,
+  type UserLocation,
+} from './store';
 import { getTodayDateId, getYesterdayDateId } from './lib/dates';
+import {
+  assessStatus,
+  chat,
+  checkInOnPlant,
+  describeHabitat,
+  estimatePrice,
+  identifyPlant,
+  type Habitat,
+  type Identification,
+} from './services/ai';
+import ScanResultScreen from './screens/ScanResultScreen';
+import StatusScreen from './screens/StatusScreen';
+import NurseryScreen from './screens/NurseryScreen';
+import WildScreen from './screens/WildScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
 import HomeScreen from './screens/HomeScreen';
 import ScannerScreen from './screens/ScannerScreen';
@@ -22,12 +49,18 @@ import ChatScreen from './screens/ChatScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import SettingsScreen from './screens/SettingsScreen';
 
-type Screen = 'home' | 'scanner' | 'settings' | 'chat' | 'history' | 'nurseries';
+type Screen =
+  | 'home'
+  | 'scanner'
+  | 'scanResult'
+  | 'status'
+  | 'settings'
+  | 'chat'
+  | 'history'
+  | 'nurseries'
+  | 'wild';
 
 const API_KEY_SECRET = 'gemini_api_key';
-
-const getAiInstance = (apiKey?: string) =>
-  new GoogleGenAI({ apiKey: apiKey || import.meta.env.VITE_GEMINI_API_KEY });
 
 export default function App() {
   const [isInitializing, setIsInitializing] = useState(true);
@@ -56,7 +89,11 @@ export default function App() {
   // Scanner
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [scanResult, setScanResult] = useState<Partial<PlantData> | null>(null);
+  const [scanResult, setScanResult] = useState<Identification | null>(null);
+  const [checkInResult, setCheckInResult] = useState<{
+    healthStatus: string;
+    openingMessage: string;
+  } | null>(null);
   const [scanMode, setScanMode] = useState<'new_plant' | 'check_in'>('new_plant');
   const [showToxicAlert, setShowToxicAlert] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
@@ -64,6 +101,35 @@ export default function App() {
   // Chat
   const [chatMessage, setChatMessage] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
+
+  // The species the nursery and wild screens are about. Set from a fresh scan
+  // or from a saved plant, so those screens work either way.
+  const [activeSpecies, setActiveSpecies] = useState<{
+    name: string;
+    scientificName: string;
+  } | null>(null);
+
+  // Plant status
+  const [status, setStatus] = useState<PlantStatus | null>(null);
+  const [isStatusLoading, setIsStatusLoading] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  // Nurseries
+  const [location, setLocation] = useState<UserLocation | null>(null);
+  const [nurseries, setNurseries] = useState<Nursery[]>([]);
+  const [radiusKm, setRadiusKm] = useState(15);
+  const [isNurseryLoading, setIsNurseryLoading] = useState(false);
+  const [nurseryError, setNurseryError] = useState<string | null>(null);
+  const [nurseriesAreStale, setNurseriesAreStale] = useState(false);
+  const [price, setPrice] = useState<PriceEstimate | null>(null);
+  const [isPriceLoading, setIsPriceLoading] = useState(false);
+
+  // Wild occurrences
+  const [occurrences, setOccurrences] = useState<OccurrenceSet | null>(null);
+  const [habitat, setHabitat] = useState<Habitat | null>(null);
+  const [isWildLoading, setIsWildLoading] = useState(false);
+  const [wildError, setWildError] = useState<string | null>(null);
+  const [noWildRecords, setNoWildRecords] = useState(false);
 
   useEffect(() => {
     const initApp = async () => {
@@ -95,6 +161,7 @@ export default function App() {
       setAppTheme(config.theme || 'theme-minimalist');
 
       setAuthConfigured(await window.flora.auth.isConfigured());
+      setLocation(await getUserLocation());
 
       onAuthStateChanged(auth, (user) => {
         setCurrentUser(user);
@@ -156,8 +223,28 @@ export default function App() {
 
   const goBack = () => {
     if (currentScreen === 'history') setCurrentScreen('chat');
-    else if (currentScreen === 'chat' && scanMode === 'check_in') setCurrentScreen('home');
+    else if (currentScreen === 'status' || currentScreen === 'wild') {
+      // These are reached from a fresh scan or from a saved plant.
+      setCurrentScreen(scanResult ? 'scanResult' : activePlantDetails ? 'chat' : 'home');
+    } else if (currentScreen === 'nurseries') {
+      setCurrentScreen(scanResult ? 'scanResult' : 'home');
+    } else if (currentScreen === 'scanResult') {
+      setScanResult(null);
+      setSelectedImage(null);
+      setCurrentScreen('home');
+    } else if (currentScreen === 'chat' && scanMode === 'check_in') setCurrentScreen('home');
     else setCurrentScreen('home');
+  };
+
+  const startScan = (mode: 'new_plant' | 'check_in' = 'new_plant') => {
+    setScanMode(mode);
+    setSelectedImage(null);
+    setScanResult(null);
+    setCheckInResult(null);
+    setStatus(null);
+    setScanError(null);
+    setShowToxicAlert(false);
+    setCurrentScreen('scanner');
   };
 
   const openPlant = (plant: PlantData) => {
@@ -170,149 +257,106 @@ export default function App() {
     if (!selectedImage) return;
     setIsScanning(true);
     setScanError(null);
-    try {
-      const base64Data = selectedImage.split(',')[1];
-      const mimeType = selectedImage.split(';')[0].split(':')[1];
-      const ai = getAiInstance(userApiKey);
-
-      if (scanMode === 'new_plant') {
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: [
-            {
-              parts: [
-                {
-                  text: 'Analyze this plant. Prioritize identifying toxicity. Provide its name, care instructions, its health status, and a 1-sentence "personality" based on its species to act as a chatbot character. Also return boolean `isToxic`, string `toxicityDetails`, and string `toxicAlertLevel` (high, low, or none). Return JSON.',
-                },
-                { inlineData: { data: base64Data, mimeType } },
-              ],
-            },
-          ],
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                careInstructions: { type: Type.STRING },
-                healthStatus: { type: Type.STRING },
-                personality: { type: Type.STRING },
-                isToxic: { type: Type.BOOLEAN },
-                toxicityDetails: { type: Type.STRING },
-                toxicAlertLevel: { type: Type.STRING },
-              },
-              required: [
-                'name',
-                'careInstructions',
-                'healthStatus',
-                'personality',
-                'isToxic',
-                'toxicityDetails',
-                'toxicAlertLevel',
-              ],
-            },
-          },
-        });
-        const res = JSON.parse(response.text!);
-        if (res.isToxic) setShowToxicAlert(true);
-        setScanResult(res);
-      } else if (scanMode === 'check_in' && activePlantDetails) {
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: [
-            {
-              parts: [
-                {
-                  text: `You are a plant avatar. Analyze the user's provided photo of this plant (soil and leaves). First, check for soil wetness and leaf health (drooping, brown spots). Your opening message MUST directly address the plant's current physical state. Example: "My soil looks dry, please water me!" Be conversational and act in character based on the plant's personality. Return your health assessment and opening message in JSON.`,
-                },
-                { inlineData: { data: base64Data, mimeType } },
-              ],
-            },
-          ],
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: { healthStatus: { type: Type.STRING }, openingMessage: { type: Type.STRING } },
-              required: ['healthStatus', 'openingMessage'],
-            },
-          },
-        });
-        setScanResult(JSON.parse(response.text!));
-      }
-    } catch {
-      setScanError('Could not analyze the plant. Check your API key and network, then try again.');
-    } finally {
-      setIsScanning(false);
-    }
-  };
-
-  const savePlantData = async () => {
-    if (!scanResult || !selectedImage) return;
-
-    let updatedPlants = [...plants];
-    const today = getTodayDateId();
-
-    if (lastCheckInDate !== today) {
-      const newStreak = lastCheckInDate === getYesterdayDateId() ? streak + 1 : 1;
-      setStreak(newStreak);
-      setLastCheckInDate(today);
-      await saveConfig({ streak: newStreak, lastCheckInDate: today });
-    }
 
     if (scanMode === 'new_plant') {
-      const newPlant: PlantData = {
-        id: Date.now().toString(),
-        name: scanResult.name || 'Unknown',
-        careInstructions: scanResult.careInstructions || '',
-        healthStatus: scanResult.healthStatus || '',
-        personality: scanResult.personality || 'A friendly botanical companion.',
-        isToxic: scanResult.isToxic,
-        toxicityDetails: scanResult.toxicityDetails,
-        toxicAlertLevel: scanResult.toxicAlertLevel,
-        imageUrl: selectedImage,
-        dateScanned: new Date().toLocaleDateString(),
-        timestamp: Date.now(),
-        checkIns: [{ dateId: today, imageUrl: selectedImage }],
-      };
-      updatedPlants = [newPlant, ...plants].sort((a, b) => b.timestamp - a.timestamp);
-      setPlants(updatedPlants);
-      setActivePlantDetails(newPlant);
+      const result = await identifyPlant(selectedImage, userApiKey);
+      if (result.ok) {
+        if (result.data.isToxic) setShowToxicAlert(true);
+        setScanResult(result.data);
+        setCurrentScreen('scanResult');
+      } else {
+        setScanError(result.error.message);
+      }
     } else if (scanMode === 'check_in' && activePlantDetails) {
-      updatedPlants = plants.map((p) => {
-        if (p.id === activePlantDetails.id) {
-          const newCheckIns = [...p.checkIns];
-          if (!newCheckIns.find((c) => c.dateId === today)) {
-            newCheckIns.push({ dateId: today, imageUrl: selectedImage });
-          }
-          const updated = { ...p, healthStatus: scanResult.healthStatus || p.healthStatus, checkIns: newCheckIns };
-          setActivePlantDetails(updated);
-          return updated;
-        }
-        return p;
-      });
-      setPlants(updatedPlants);
-
-      const openingMsg = (scanResult as { openingMessage?: string }).openingMessage;
-      if (openingMsg) {
-        const currentHistory = chatHistory[activePlantDetails.id] || [];
-        const openingEntry: ChatMessage = {
-          id: Date.now().toString(),
-          role: 'model',
-          text: openingMsg,
-          timestamp: Date.now(),
-        };
-        const finalHistory: ChatMessage[] = [...currentHistory, openingEntry];
-        setChatHistory((prev) => ({ ...prev, [activePlantDetails.id]: finalHistory }));
-        await saveChatHistory(activePlantDetails.id, finalHistory);
+      const result = await checkInOnPlant(selectedImage, userApiKey);
+      if (result.ok) {
+        setCheckInResult(result.data);
+        await saveCheckIn(result.data);
+      } else {
+        setScanError(result.error.message);
       }
     }
 
-    await savePlants(updatedPlants);
+    setIsScanning(false);
+  };
+
+  const bumpStreak = async () => {
+    const today = getTodayDateId();
+    if (lastCheckInDate === today) return;
+    const newStreak = lastCheckInDate === getYesterdayDateId() ? streak + 1 : 1;
+    setStreak(newStreak);
+    setLastCheckInDate(today);
+    await saveConfig({ streak: newStreak, lastCheckInDate: today });
+  };
+
+  const addToGarden = async () => {
+    if (!scanResult || !selectedImage) return;
+    const today = getTodayDateId();
+    await bumpStreak();
+
+    const newPlant: PlantData = {
+      id: Date.now().toString(),
+      name: scanResult.name || 'Unknown',
+      scientificName: scanResult.scientificName,
+      confidence: scanResult.confidence,
+      careInstructions: scanResult.careInstructions || '',
+      healthStatus: scanResult.healthStatus || '',
+      personality: scanResult.personality || 'A friendly botanical companion.',
+      isToxic: scanResult.isToxic,
+      toxicityDetails: scanResult.toxicityDetails,
+      toxicAlertLevel: scanResult.toxicAlertLevel,
+      status: status ?? undefined,
+      imageUrl: selectedImage,
+      dateScanned: new Date().toLocaleDateString(),
+      timestamp: Date.now(),
+      checkIns: [{ dateId: today, imageUrl: selectedImage }],
+    };
+
+    const updated = [newPlant, ...plants].sort((a, b) => b.timestamp - a.timestamp);
+    setPlants(updated);
+    setActivePlantDetails(newPlant);
+    await savePlants(updated);
+
     setSelectedImage(null);
     setScanResult(null);
+    setStatus(null);
+    setCurrentScreen('home');
+  };
 
-    setCurrentScreen(scanMode === 'new_plant' ? 'home' : 'chat');
+  const saveCheckIn = async (result: { healthStatus: string; openingMessage: string }) => {
+    if (!activePlantDetails || !selectedImage) return;
+    const today = getTodayDateId();
+    await bumpStreak();
+
+    const updated = plants.map((p) => {
+      if (p.id !== activePlantDetails.id) return p;
+      const newCheckIns = [...p.checkIns];
+      if (!newCheckIns.find((c) => c.dateId === today)) {
+        newCheckIns.push({ dateId: today, imageUrl: selectedImage });
+      }
+      const next = { ...p, healthStatus: result.healthStatus || p.healthStatus, checkIns: newCheckIns };
+      setActivePlantDetails(next);
+      return next;
+    });
+    setPlants(updated);
+    await savePlants(updated);
+
+    if (result.openingMessage) {
+      const currentHistory = chatHistory[activePlantDetails.id] || [];
+      const openingEntry: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'model',
+        text: result.openingMessage,
+        timestamp: Date.now(),
+      };
+      const finalHistory: ChatMessage[] = [...currentHistory, openingEntry];
+      setChatHistory((prev) => ({ ...prev, [activePlantDetails.id]: finalHistory }));
+      await saveChatHistory(activePlantDetails.id, finalHistory);
+    }
+
+    setSelectedImage(null);
+    setCheckInResult(null);
+    setCurrentScreen('chat');
   };
 
   const loadChatHistory = async (plantId: string) => {
@@ -337,47 +381,180 @@ export default function App() {
     setChatMessage('');
     setIsChatLoading(true);
 
-    try {
-      const ai = getAiInstance(userApiKey);
-      const systemInstruction = `You are a ${activePlantDetails.name}. Your personality is: "${activePlantDetails.personality}". Your current health is: "${activePlantDetails.healthStatus}". Act exactly like this plant in a text conversation with your owner. Keep responses conversational.`;
+    const reply = await chat(activePlantDetails, newHistory, userApiKey);
+    const modelMsg: ChatMessage = {
+      id: Date.now().toString(),
+      role: 'model',
+      text: reply.ok ? reply.data : reply.error.message,
+      timestamp: Date.now(),
+    };
+    const finalHistory = [...newHistory, modelMsg];
 
-      const contents = newHistory.map((msg) => ({
-        role: msg.role === 'user' ? 'user' : 'model',
-        parts: [{ text: msg.text }],
-      }));
+    setChatHistory((prev) => ({ ...prev, [plantId]: finalHistory }));
+    if (reply.ok) await saveChatHistory(plantId, finalHistory);
+    setIsChatLoading(false);
+  };
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents,
-        config: { systemInstruction: { parts: [{ text: systemInstruction }] } },
-      });
+  // ---- The four post-capture actions -------------------------------------
 
-      const modelMsg: ChatMessage = {
-        id: Date.now().toString(),
-        role: 'model',
-        text: response.text || '*rustles leaves*',
-        timestamp: Date.now(),
-      };
-      const finalHistory = [...newHistory, modelMsg];
+  const openPlantStatus = async (imageOverride?: string) => {
+    const image = imageOverride ?? selectedImage;
+    if (!image) return;
+    const name = scanResult?.name ?? activePlantDetails?.name ?? 'this plant';
+    setCurrentScreen('status');
+    setIsStatusLoading(true);
+    setStatusError(null);
 
-      setChatHistory((prev) => ({ ...prev, [plantId]: finalHistory }));
-      await saveChatHistory(plantId, finalHistory);
-    } catch {
-      setChatHistory((prev) => ({
-        ...prev,
-        [plantId]: [
-          ...newHistory,
-          {
-            id: Date.now().toString(),
-            role: 'model',
-            text: 'Sorry, my connection is poor today.',
-            timestamp: Date.now(),
-          },
-        ],
-      }));
-    } finally {
-      setIsChatLoading(false);
+    const result = await assessStatus(image, name, userApiKey);
+    if (result.ok) {
+      const assessed: PlantStatus = { ...result.data, assessedAt: Date.now() };
+      setStatus(assessed);
+      // Persist onto the plant when it is already in the garden.
+      if (activePlantDetails) {
+        const updated = plants.map((p) =>
+          p.id === activePlantDetails.id ? { ...p, status: assessed } : p,
+        );
+        setPlants(updated);
+        await savePlants(updated);
+      }
+    } else {
+      setStatusError(result.error.message);
     }
+    setIsStatusLoading(false);
+  };
+
+  const loadPrice = async (scientificName: string, loc: UserLocation | null) => {
+    const cached = await getPriceEstimate(scientificName);
+    if (cached) {
+      setPrice(cached);
+      return;
+    }
+    setIsPriceLoading(true);
+    const country = loc?.label.split(',').pop()?.trim() || 'your country';
+    const result = await estimatePrice(scientificName, country, userApiKey);
+    if (result.ok) {
+      const estimate: PriceEstimate = {
+        ...result.data,
+        scientificName,
+        fetchedAt: Date.now(),
+      };
+      setPrice(estimate);
+      await savePriceEstimate(estimate);
+    }
+    setIsPriceLoading(false);
+  };
+
+  const runNurserySearch = async (loc: UserLocation, km: number) => {
+    setIsNurseryLoading(true);
+    setNurseryError(null);
+    setNurseriesAreStale(false);
+
+    const key = nurseryCacheKey(loc.lat, loc.lon, km);
+    const result = await window.flora.findNurseries({ lat: loc.lat, lon: loc.lon, radiusKm: km });
+
+    if (result.ok) {
+      setNurseries(result.data);
+      await saveCachedNurseries(key, result.data);
+    } else {
+      // Fall back to the last saved results rather than showing nothing.
+      const cached = await getCachedNurseries(key);
+      if (cached?.length) {
+        setNurseries(cached);
+        setNurseriesAreStale(true);
+      } else {
+        setNurseries([]);
+        setNurseryError(result.error.message);
+      }
+    }
+    setIsNurseryLoading(false);
+  };
+
+  const openNurseries = async (species?: { name: string; scientificName: string }) => {
+    if (species) setActiveSpecies(species);
+    setCurrentScreen('nurseries');
+    setPrice(null);
+
+    const loc = location ?? (await getUserLocation());
+    if (!loc) return; // The screen prompts for a location.
+
+    setLocation(loc);
+    await runNurserySearch(loc, radiusKm);
+
+    const name = species?.scientificName ?? activeSpecies?.scientificName;
+    if (name) await loadPrice(name, loc);
+  };
+
+  const submitPlace = async (query: string) => {
+    setIsNurseryLoading(true);
+    setNurseryError(null);
+    const result = await window.flora.geocode(query);
+    setIsNurseryLoading(false);
+
+    if (!result.ok) {
+      setNurseryError(result.error.message);
+      return;
+    }
+    setLocation(result.data);
+    await saveUserLocation(result.data);
+    await runNurserySearch(result.data, radiusKm);
+    if (activeSpecies) await loadPrice(activeSpecies.scientificName, result.data);
+  };
+
+  const useIpLocation = async () => {
+    setIsNurseryLoading(true);
+    setNurseryError(null);
+    const result = await window.flora.locateByIp();
+    setIsNurseryLoading(false);
+
+    if (!result.ok) {
+      setNurseryError(result.error.message);
+      return;
+    }
+    setLocation(result.data);
+    await saveUserLocation(result.data);
+    await runNurserySearch(result.data, radiusKm);
+    if (activeSpecies) await loadPrice(activeSpecies.scientificName, result.data);
+  };
+
+  const changeRadius = async (km: number) => {
+    setRadiusKm(km);
+    if (location) await runNurserySearch(location, km);
+  };
+
+  const openWild = async (species?: { name: string; scientificName: string }) => {
+    const target = species ?? activeSpecies;
+    if (species) setActiveSpecies(species);
+    if (!target) return;
+
+    setCurrentScreen('wild');
+    setIsWildLoading(true);
+    setWildError(null);
+    setNoWildRecords(false);
+    setOccurrences(null);
+    setHabitat(null);
+
+    const match = await window.flora.gbifMatch(target.scientificName || target.name);
+
+    if (match.ok) {
+      const origin = location ? { lat: location.lat, lon: location.lon } : undefined;
+      const found = await window.flora.gbifOccurrences(match.data.usageKey, origin);
+      if (found.ok) {
+        setOccurrences(found.data);
+        setNoWildRecords(found.data.records.length === 0);
+      } else {
+        setWildError(found.error.message);
+      }
+    } else if (match.error.code === 'SPECIES_NO_MATCH') {
+      // Not an error: most cultivated plants have no wild backbone match.
+      setNoWildRecords(true);
+    } else {
+      setWildError(match.error.message);
+    }
+
+    setIsWildLoading(false);
+
+    const described = await describeHabitat(target.scientificName || target.name, userApiKey);
+    if (described.ok) setHabitat(described.data);
   };
 
   const handleSignIn = async () => {
@@ -456,16 +633,85 @@ export default function App() {
                     key="scanner"
                     selectedImage={selectedImage}
                     isScanning={isScanning}
-                    scanResult={scanResult}
-                    scanMode={scanMode}
-                    showToxicAlert={showToxicAlert}
                     hasApiKey={Boolean(userApiKey)}
-                    activePlantName={activePlantDetails?.name}
                     scanError={scanError}
+                    onCaptured={(dataUrl) => {
+                      setSelectedImage(dataUrl);
+                      setScanError(null);
+                    }}
+                    onPickFile={(e) => handleCameraCapture(e, scanMode)}
                     onAnalyze={processImage}
-                    onSave={savePlantData}
-                    onDismissToxicAlert={() => setShowToxicAlert(false)}
                     onBack={goBack}
+                  />
+                )}
+
+                {currentScreen === 'scanResult' && scanResult && selectedImage && (
+                  <ScanResultScreen
+                    key="scanResult"
+                    image={selectedImage}
+                    result={scanResult}
+                    showToxicAlert={showToxicAlert}
+                    isSaved={plants.some((p) => p.name === scanResult.name && p.imageUrl === selectedImage)}
+                    onDismissToxicAlert={() => setShowToxicAlert(false)}
+                    onAddToGarden={addToGarden}
+                    onPlantStatus={openPlantStatus}
+                    onWhereToBuy={() =>
+                      openNurseries({
+                        name: scanResult.name,
+                        scientificName: scanResult.scientificName,
+                      })
+                    }
+                    onFindInWild={() =>
+                      openWild({
+                        name: scanResult.name,
+                        scientificName: scanResult.scientificName,
+                      })
+                    }
+                  />
+                )}
+
+                {currentScreen === 'status' && (
+                  <StatusScreen
+                    key="status"
+                    plantName={scanResult?.name ?? activePlantDetails?.name ?? 'This plant'}
+                    status={status}
+                    isLoading={isStatusLoading}
+                    error={statusError}
+                    onRetry={openPlantStatus}
+                  />
+                )}
+
+                {currentScreen === 'nurseries' && (
+                  <NurseryScreen
+                    key="nurseries"
+                    speciesName={activeSpecies?.scientificName ?? null}
+                    location={location}
+                    nurseries={nurseries}
+                    price={price}
+                    radiusKm={radiusKm}
+                    isLoading={isNurseryLoading}
+                    isPriceLoading={isPriceLoading}
+                    error={nurseryError}
+                    isStale={nurseriesAreStale}
+                    onSubmitPlace={submitPlace}
+                    onUseIpLocation={useIpLocation}
+                    onChangeRadius={changeRadius}
+                    onClearLocation={() => setLocation(null)}
+                    onRetry={() => location && runNurserySearch(location, radiusKm)}
+                    onOpenExternal={(url) => window.flora.openExternal(url)}
+                  />
+                )}
+
+                {currentScreen === 'wild' && activeSpecies && (
+                  <WildScreen
+                    key="wild"
+                    speciesName={activeSpecies.scientificName || activeSpecies.name}
+                    occurrences={occurrences}
+                    habitat={habitat}
+                    isLoading={isWildLoading}
+                    noWildRecords={noWildRecords}
+                    error={wildError}
+                    onRetry={() => openWild()}
                   />
                 )}
 
@@ -485,6 +731,19 @@ export default function App() {
                     onSend={sendMessage}
                     onOpenHistory={() => setCurrentScreen('history')}
                     onCheckInPhoto={(e) => handleCameraCapture(e, 'check_in')}
+                    onPlantStatus={() => openPlantStatus(activePlantDetails.imageUrl)}
+                    onWhereToBuy={() =>
+                      openNurseries({
+                        name: activePlantDetails.name,
+                        scientificName: activePlantDetails.scientificName ?? activePlantDetails.name,
+                      })
+                    }
+                    onFindInWild={() =>
+                      openWild({
+                        name: activePlantDetails.name,
+                        scientificName: activePlantDetails.scientificName ?? activePlantDetails.name,
+                      })
+                    }
                   />
                 )}
 
@@ -508,7 +767,9 @@ export default function App() {
               </AnimatePresence>
             </main>
 
-            {currentScreen !== 'scanner' && currentScreen !== 'history' && (
+            {currentScreen !== 'scanner' &&
+              currentScreen !== 'history' &&
+              currentScreen !== 'scanResult' && (
               <nav className="absolute bottom-0 w-full bg-bg-card/90 backdrop-blur-md border-t border-[var(--color-accent)]/20 pb-safe px-10 flex justify-between h-[90px] items-start pt-4 z-40">
                 <button
                   onClick={() => setCurrentScreen('home')}
@@ -522,18 +783,15 @@ export default function App() {
                   <span className="text-[10px] font-bold uppercase tracking-wider">Garden</span>
                 </button>
 
-                <label className="relative w-16 h-16 flex items-center justify-center -mt-8 rounded-full bg-[var(--color-accent)] text-bg-main shadow-lg border-4 border-bg-main transition transform active:scale-95 cursor-pointer">
+                <button
+                  onClick={() => startScan('new_plant')}
+                  className="relative w-16 h-16 flex items-center justify-center -mt-8 rounded-full bg-[var(--color-accent)] text-bg-main shadow-lg border-4 border-bg-main transition transform active:scale-95"
+                >
                   <ScanLine size={26} strokeWidth={2.5} />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => handleCameraCapture(e, 'new_plant')}
-                  />
-                </label>
+                </button>
 
                 <button
-                  onClick={() => setCurrentScreen('nurseries')}
+                  onClick={() => openNurseries()}
                   className={`flex flex-col items-center gap-1.5 w-16 transition-colors ${
                     currentScreen === 'nurseries'
                       ? 'text-[var(--color-accent)]'

@@ -2,6 +2,8 @@ export type FloraResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: { code: string; message: string } };
 
+import type { Nursery, OccurrenceSet, SpeciesMatch, UserLocation } from '../store';
+
 export type GoogleTokens = { idToken: string; accessToken: string };
 
 export type FloraApi = {
@@ -18,6 +20,20 @@ export type FloraApi = {
     /** False when electron/oauth-config.json is absent or unfilled. */
     isConfigured(): Promise<boolean>;
   };
+  /** Nominatim forward geocode. Called only on explicit user action. */
+  geocode(query: string): Promise<FloraResult<UserLocation>>;
+  /** Coarse IP fallback — desktops have no GPS. */
+  locateByIp(): Promise<FloraResult<UserLocation>>;
+  findNurseries(opts: {
+    lat: number;
+    lon: number;
+    radiusKm: number;
+  }): Promise<FloraResult<Nursery[]>>;
+  gbifMatch(name: string): Promise<FloraResult<SpeciesMatch>>;
+  gbifOccurrences(
+    taxonKey: number,
+    origin?: { lat: number; lon: number },
+  ): Promise<FloraResult<OccurrenceSet>>;
 };
 
 declare global {

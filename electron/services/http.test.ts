@@ -1,7 +1,22 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getJson } from './http';
+import { clearOnlineCache } from './net';
 
+// A failed request now consults the connectivity probe to tell "no internet"
+// from "this one service is unreachable", and that verdict is cached.
+beforeEach(() => clearOnlineCache());
 afterEach(() => vi.unstubAllGlobals());
+
+const PROBE_HOST = 'www.gstatic.com';
+
+/** Lets the probe succeed while the request under test fails. */
+const stubReachableProbe = (onTarget: () => Promise<Response>) =>
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL) =>
+      String(input).includes(PROBE_HOST) ? new Response(null, { status: 204 }) : onTarget(),
+    ),
+  );
 
 /**
  * Assertions use toMatchObject rather than narrowing on `result.ok`: the root
@@ -25,13 +40,23 @@ describe('getJson', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'HTTP_429' } });
   });
 
-  it('returns an error result when fetch rejects', async () => {
+  it('reports OFFLINE when nothing is reachable, including the probe', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
         throw new Error('network down');
       }),
     );
+
+    const result = await getJson('https://example.test/x');
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'OFFLINE' } });
+  });
+
+  it('reports NETWORK when the machine is online but the service is not', async () => {
+    stubReachableProbe(async () => {
+      throw new Error('service down');
+    });
 
     const result = await getJson('https://example.test/x');
 

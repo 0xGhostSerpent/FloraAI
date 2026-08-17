@@ -1,18 +1,16 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig, loadEnv} from 'vite';
+import {defineConfig} from 'vite';
 
-export default defineConfig(({mode}) => {
-  const env = loadEnv(mode, '.', '');
+export default defineConfig(() => {
   return {
     // Production loads over file://, where Vite's default absolute asset
     // paths resolve to filesystem root and every asset 404s.
     base: './',
     plugins: [react(), tailwindcss()],
-    define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-    },
+    // No API key is ever baked into the bundle: keys live in the OS key store
+    // and every provider call is made from the main process.
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

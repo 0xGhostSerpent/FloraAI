@@ -1,4 +1,5 @@
 import { err, ok, Result } from './result';
+import { isOnline } from './net';
 
 const TIMEOUT_MS = 10_000;
 
@@ -19,10 +20,13 @@ async function run<T>(url: string, init: RequestInit): Promise<Result<T>> {
 
     return ok((await response.json()) as T);
   } catch (cause) {
-    const isTimeout = cause instanceof Error && cause.name === 'TimeoutError';
-    return isTimeout
-      ? err('TIMEOUT', 'The request took too long.')
-      : err('NETWORK', 'Could not reach the service.');
+    if (cause instanceof Error && cause.name === 'TimeoutError') {
+      return err('TIMEOUT', 'The request took too long.');
+    }
+    // "Could not reach the service" is misleading when nothing is reachable.
+    return (await isOnline())
+      ? err('NETWORK', 'Could not reach the service.')
+      : err('OFFLINE', 'No internet connection. Reconnect, then try again.');
   }
 }
 
@@ -40,3 +44,28 @@ export function postForm<T>(url: string, body: Record<string, string>): Promise<
     body: new URLSearchParams(body).toString(),
   });
 }
+
+export function postJson<T>(
+  url: string,
+  body: unknown,
+  opts?: { headers?: Record<string, string> },
+): Promise<Result<T>> {
+  return run<T>(url, {
+    method: 'POST',
+    headers: baseHeaders({ 'Content-Type': 'application/json', ...opts?.headers }),
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  });
+}
+
+export function patchJson<T>(
+  url: string,
+  body: unknown,
+  opts?: { headers?: Record<string, string> },
+): Promise<Result<T>> {
+  return run<T>(url, {
+    method: 'PATCH',
+    headers: baseHeaders({ 'Content-Type': 'application/json', ...opts?.headers }),
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  });
+}
+

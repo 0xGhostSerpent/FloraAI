@@ -1,4 +1,4 @@
-import { AlertTriangle, Activity, Leaf, MapPin, Store } from 'lucide-react';
+import { AlertTriangle, Activity, Ban, Camera, Leaf, MapPin, Store } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { Identification } from '../services/ai';
 
@@ -12,6 +12,7 @@ type Props = {
   onPlantStatus: () => void;
   onWhereToBuy: () => void;
   onFindInWild: () => void;
+  onBackToScanner?: () => void;
 };
 
 type ActionProps = {
@@ -55,7 +56,53 @@ export default function ScanResultScreen({
   onPlantStatus,
   onWhereToBuy,
   onFindInWild,
+  onBackToScanner,
 }: Props) {
+  // Non-plant rejection screen: only botanic specimens are accepted.
+  if (result.isPlant === false) {
+    const detectedName = result.detectedObject || result.name || 'Non-plant object';
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0 }}
+        className="px-6 pb-6 pt-2 space-y-5"
+      >
+        <div className="bg-bg-card dynamic-border rounded-[var(--radius-dynamic)] p-5 text-center flex flex-col items-center space-y-4 shadow-sm">
+          <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500">
+            <Ban size={32} />
+          </div>
+
+          <div className="relative w-32 h-32 rounded-2xl overflow-hidden dynamic-border shadow-md">
+            <img src={image} alt="Scanned item" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-black/20" />
+          </div>
+
+          <div>
+            <span className="inline-block text-[11px] font-bold uppercase tracking-widest bg-amber-500/15 text-amber-500 px-3 py-1 rounded-full mb-2">
+              Not a Plant / Botanical Specimen
+            </span>
+            <h2 className="text-xl font-bold text-text-main leading-snug">
+              {detectedName}
+            </h2>
+            <p className="text-xs text-text-muted mt-2 leading-relaxed max-w-xs mx-auto">
+              {result.rejectionReason ||
+                'Flora AI is specialized strictly for identifying, caring for, and finding plants, trees, and flowers. Non-botanical items cannot be added to your garden or searched in nurseries.'}
+            </p>
+          </div>
+
+          <button
+            onClick={onBackToScanner}
+            className="w-full bg-[var(--color-accent)] text-bg-main py-3.5 rounded-[var(--radius-dynamic)] font-bold text-sm shadow-md hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2"
+          >
+            <Camera size={18} />
+            Scan a Plant Instead
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
+
   // The toxicity warning must be acknowledged before anything else is offered.
   if (showToxicAlert) {
     return (
@@ -170,3 +217,4 @@ export default function ScanResultScreen({
     </motion.div>
   );
 }
+

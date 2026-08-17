@@ -1,4 +1,5 @@
 import { get, set } from 'idb-keyval';
+import type { AiProviderId } from './types/flora';
 
 export type PlantStatus = {
   overall: 'healthy' | 'stressed' | 'declining' | 'unknown';
@@ -161,11 +162,32 @@ export async function saveCachedNurseries(key: string, list: Nursery[]): Promise
   await set('flora_nursery_cache', cache);
 }
 
-export async function getAppConfig() {
-  const config = await get('flora_config');
-  return config || { lastCheckInDate: null, streak: 0, theme: 'theme-minimalist' };
+export type AppConfig = {
+  lastCheckInDate: string | null;
+  streak: number;
+  theme: string;
+  aiProvider?: AiProviderId;
+  /**
+   * Per-provider, because one shared `aiModel` meant switching provider left a
+   * model ID the new provider does not offer. `aiModel` is the pre-migration
+   * single value, read once and then folded into aiModels.
+   */
+  aiModels?: Partial<Record<AiProviderId, string>>;
+  aiModel?: string;
+  aiBaseUrl?: string;
+};
+
+const DEFAULT_CONFIG: AppConfig = {
+  lastCheckInDate: null,
+  streak: 0,
+  theme: 'theme-minimalist',
+};
+
+export async function getAppConfig(): Promise<AppConfig> {
+  const config = await get<AppConfig>('flora_config');
+  return { ...DEFAULT_CONFIG, ...config };
 }
 
-export async function saveAppConfig(config: any) {
+export async function saveAppConfig(config: AppConfig): Promise<void> {
   await set('flora_config', config);
 }

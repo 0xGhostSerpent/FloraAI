@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Nunito:ital,wght@0,200..1000;1,200..1000&family=Fira+Code:wght@300..700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -12,44 +12,47 @@
   --radius-dynamic: var(--border-radius);
 }
 
+/* 1. Emerald Botanical (Default: Crisp, Fresh, Organic Light) */
 :root, .theme-minimalist {
-  --bg-primary: #FAF9F6;
+  --bg-primary: #F7F9F7;
   --bg-secondary: #FFFFFF;
-  --accent-primary: #6B8E23;
-  --accent-secondary: #E2725B;
-  --text-primary: #2C3E2D;
-  --text-secondary: #6B8E23;
-  --font-main: 'Lora', serif;
+  --accent-primary: #15803D;
+  --accent-secondary: #22C55E;
+  --text-primary: #0F172A;
+  --text-secondary: #64748B;
+  --font-main: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   --border-radius: 16px;
-  --border-style: 1px solid rgba(107, 142, 35, 0.3);
+  --border-style: 1px solid rgba(21, 128, 61, 0.14);
 }
 
+/* 2. Nordic Terracotta (Warm, Earthy, Nordic Clay) */
 .theme-gamified {
-  --bg-primary: #FFFACD;
+  --bg-primary: #FAF6F0;
   --bg-secondary: #FFFFFF;
-  --accent-primary: #FF69B4;
-  --accent-secondary: #00BFFF;
-  --text-primary: #000000;
-  --text-secondary: #555555;
-  --font-main: 'Nunito', sans-serif;
-  --border-radius: 24px;
-  --border-style: 3px solid #000000;
+  --accent-primary: #C2410C;
+  --accent-secondary: #D97706;
+  --text-primary: #1C1917;
+  --text-secondary: #78716C;
+  --font-main: 'Outfit', system-ui, -apple-system, sans-serif;
+  --border-radius: 18px;
+  --border-style: 1px solid rgba(194, 65, 12, 0.15);
 }
 
+/* 3. Midnight Forest (Deep Obsidian, Jade Luminescence) */
 .theme-cyber {
-  --bg-primary: #000000;
-  --bg-secondary: #0A0A1A;
-  --accent-primary: #39FF14;
-  --accent-secondary: #8A2BE2;
-  --text-primary: #39FF14;
-  --text-secondary: #8A2BE2;
-  --font-main: 'Fira Code', monospace;
-  --border-radius: 0px;
-  --border-style: 1px solid var(--accent-primary);
+  --bg-primary: #090D0B;
+  --bg-secondary: #131A16;
+  --accent-primary: #10B981;
+  --accent-secondary: #34D399;
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --font-main: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --border-radius: 16px;
+  --border-style: 1px solid rgba(16, 185, 129, 0.18);
 }
 
 body {
-  @apply bg-bg-main text-text-main m-0 p-0 font-dynamic transition-colors duration-300;
+  @apply bg-bg-main text-text-main m-0 p-0 font-dynamic transition-colors duration-300 antialiased selection:bg-[var(--color-accent)]/20;
 }
 
 .dynamic-border {
@@ -57,24 +60,29 @@ body {
 }
 
 .dynamic-shadow {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-}
-
-.theme-gamified .dynamic-shadow {
-  box-shadow: 4px 4px 0px #000000;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
 }
 
 .theme-cyber .dynamic-shadow {
-  box-shadow: 0 0 10px rgba(57, 255, 20, 0.2);
+  box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.4), 0 0 1px 1px rgba(16, 185, 129, 0.12);
+}
+
+.theme-gamified .dynamic-shadow {
+  box-shadow: 0 6px 20px -3px rgba(194, 65, 12, 0.06), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
 }
 
 .custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
+  width: 5px;
+  height: 5px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: var(--accent-primary);
+  opacity: 0.4;
   border-radius: var(--border-radius);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-secondary);
 }

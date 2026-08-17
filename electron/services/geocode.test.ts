@@ -54,7 +54,7 @@ describe('geocodeQuery', () => {
     expect(url.searchParams.get('q')).toBe('Dhaka');
   });
 
-  it('propagates a transport failure', async () => {
+  it('propagates a transport failure as OFFLINE when nothing is reachable', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -62,7 +62,7 @@ describe('geocodeQuery', () => {
       }),
     );
 
-    expect(await geocodeQuery('Dhaka')).toMatchObject({ ok: false, error: { code: 'NETWORK' } });
+    expect(await geocodeQuery('Dhaka')).toMatchObject({ ok: false, error: { code: 'OFFLINE' } });
   });
 });
 

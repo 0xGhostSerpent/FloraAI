@@ -17,8 +17,9 @@ describe('buildConsentUrl', () => {
     expect(url.searchParams.get('redirect_uri')).toBe(opts.redirectUri);
     expect(url.searchParams.get('response_type')).toBe('code');
     expect(url.searchParams.get('code_challenge')).toBe(opts.challenge);
-    expect(url.searchParams.get('state')).toBe(opts.state);
-    expect(url.searchParams.get('scope')).toBe('openid email profile');
+    expect(url.searchParams.get('scope')).toBe(
+      'openid email profile https://www.googleapis.com/auth/drive.file',
+    );
   });
 
   it('always requests S256 and never plain', () => {

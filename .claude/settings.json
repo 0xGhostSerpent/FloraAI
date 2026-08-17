@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Bash(rtk read *)"
+      "Bash(rtk read *)",
+      "mcp__plugin_context-mode_context-mode__ctx_execute",
+      "Bash(python3 -c \"print\\('python stdout OK'\\)\")",
+      "Bash(python3 -c \"import zipfile,re; print\\('zipfile OK'\\)\")",
+      "Bash(python3 /tmp/claude-1000/-home-spectreghost-Documents-Uni-dekstop-project/b22ba6be-aeb1-4148-b4c6-1d9afc68cd58/scratchpad/revise_proposal.py)",
+      "Bash(python3 /tmp/claude-1000/-home-spectreghost-Documents-Uni-dekstop-project/b22ba6be-aeb1-4148-b4c6-1d9afc68cd58/scratchpad/retime.py)",
+      "Bash(pkill -f \"linux-unpacked/flora-ai\")",
+      "Bash(rtk du *)",
+      "Bash(rtk git *)"
     ]
   }
 }

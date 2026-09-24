@@ -82,7 +82,9 @@ electron/          Main process — no CORS restrictions, holds all network and 
 src/               React 19 renderer
   App.tsx          Routing and shared state
   screens/         One component per screen
-  components/      Shared UI
+  components/ui    Buttons, cards, fields, dialogs: every screen is built from these
+  components/      Sidebar, map
+  index.css        Design tokens and the Fern, Clay and Night themes
   store.ts         IndexedDB persistence via idb-keyval
 ```
 

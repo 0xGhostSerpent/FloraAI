@@ -40,9 +40,14 @@ export default function MapView({ points, center, zoom = 12, className }: Props)
     mapRef.current = map;
     layerRef.current = L.layerGroup().addTo(map);
 
+    // Leaflet measures its container once; grid and panel layouts resize it later.
+    const resize = new ResizeObserver(() => map.invalidateSize());
+    resize.observe(containerRef.current);
+
     // Leaflet leaks its handlers otherwise, and React 19 strict mode will
     // invoke this effect twice in development.
     return () => {
+      resize.disconnect();
       map.remove();
       mapRef.current = null;
       layerRef.current = null;
@@ -56,14 +61,20 @@ export default function MapView({ points, center, zoom = 12, className }: Props)
 
     layer.clearLayers();
 
+    // Markers follow the active theme rather than a fixed green.
+    const styles = getComputedStyle(document.documentElement);
+    const accent = styles.getPropertyValue('--accent').trim() || '#2f6b3f';
+    const ink = styles.getPropertyValue('--ink').trim() || '#18211b';
+    const surface = styles.getPropertyValue('--surface').trim() || '#ffffff';
+
     for (const point of points) {
       // circleMarker is pure SVG. L.marker resolves icon PNGs by URL, which
       // breaks under the bundler and again under the packaged CSP.
       L.circleMarker([point.lat, point.lon], {
-        radius: point.accent ? 8 : 6,
-        color: point.accent ? '#2563eb' : '#15803d',
-        fillColor: point.accent ? '#3b82f6' : '#22c55e',
-        fillOpacity: 0.85,
+        radius: point.accent ? 7 : 6,
+        color: surface,
+        fillColor: point.accent ? ink : accent,
+        fillOpacity: 0.95,
         weight: 2,
       })
         .bindPopup(point.label ?? '')
@@ -87,7 +98,8 @@ export default function MapView({ points, center, zoom = 12, className }: Props)
   return (
     <div
       ref={containerRef}
-      className={className ?? 'w-full h-56 rounded-[var(--radius-dynamic)] overflow-hidden dynamic-border z-0'}
+      // isolate: Leaflet's panes use z-index 400+, which would otherwise sit above dialogs.
+      className={`isolate ${className ?? 'h-64 w-full overflow-hidden rounded-2xl border border-line'}`}
     />
   );
 }

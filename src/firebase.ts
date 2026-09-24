@@ -29,20 +29,6 @@ export type FloraUser = {
   isAnonymous: boolean;
 };
 
-export const getOrCreateLocalUser = (): FloraUser => {
-  let uid = localStorage.getItem('flora_local_uid');
-  if (!uid) {
-    uid = 'flora_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
-    localStorage.setItem('flora_local_uid', uid);
-  }
-  return {
-    uid,
-    email: null,
-    displayName: 'Instant Profile',
-    isAnonymous: true,
-  };
-};
-
 export const getStoredActiveUser = (): FloraUser | null => {
   try {
     const raw = localStorage.getItem('flora_active_user');
@@ -140,10 +126,13 @@ export const signInInstantAccount = async (): Promise<FloraResult<FloraUser>> =>
     localStorage.setItem('flora_active_user', JSON.stringify(user));
     return { ok: true, data: user };
   } catch {
-    // Seamless offline/local instant account fallback so user is NEVER blocked by Firebase admin restrictions
-    const localUser = getOrCreateLocalUser();
-    localStorage.setItem('flora_active_user', JSON.stringify(localUser));
-    return { ok: true, data: localUser };
+    return {
+      ok: false,
+      error: {
+        code: 'AUTH_UNAVAILABLE',
+        message: "Couldn't reach the backup service. Check your connection, or continue without an account.",
+      },
+    };
   }
 };
 
@@ -163,11 +152,17 @@ export const syncCloudBackup = async (
       { merge: true },
     );
     return { ok: true, data: { syncedAt: now } };
-  } catch {
-    // Save locally as timestamp
-    const now = Date.now();
-    localStorage.setItem('flora_last_sync', String(now));
-    return { ok: true, data: { syncedAt: now } };
+  } catch (err: any) {
+    // Reporting success here would tell the user a backup exists when it does not.
+    return {
+      ok: false,
+      error: {
+        code: 'SYNC_FAILED',
+        message: err?.code === 'permission-denied'
+          ? 'The backup service refused this account. Sign out and sign in again.'
+          : "Backup didn't go through. Your garden is still saved on this computer.",
+      },
+    };
   }
 };
 

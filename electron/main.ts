@@ -28,8 +28,9 @@ const CHROME_USER_AGENT =
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' https://apis.google.com https://*.firebaseio.com https://*.googleapis.com https://*.firebaseapp.com",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' data: https://fonts.gstatic.com",
+  // Fonts are bundled so the app renders the same offline.
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:",
   "img-src 'self' data: blob: https://*.googleusercontent.com https://*.tile.openstreetmap.org https://*.gstatic.com",
   "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://accounts.google.com https://*.firebaseio.com https://*.firebaseapp.com",
   "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://*.google.com",
@@ -54,7 +55,8 @@ function createWindow(): void {
     height: 820,
     minWidth: 900,
     minHeight: 700,
-    backgroundColor: '#000000',
+    // Matches the default theme so the window does not flash black on launch.
+    backgroundColor: '#f4f5f0',
     title: 'Flora AI',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

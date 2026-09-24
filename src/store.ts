@@ -1,4 +1,4 @@
-import { get, set } from 'idb-keyval';
+import { clear, get, set } from 'idb-keyval';
 import type { AiProviderId } from './types/flora';
 
 export type PlantStatus = {
@@ -190,4 +190,9 @@ export async function getAppConfig(): Promise<AppConfig> {
 
 export async function saveAppConfig(config: AppConfig): Promise<void> {
   await set('flora_config', config);
+}
+
+/** Removes every plant, conversation, cache and setting from this computer. */
+export async function clearAllData(): Promise<void> {
+  await clear();
 }

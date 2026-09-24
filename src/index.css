@@ -1,88 +1,176 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
-@import "tailwindcss";
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/fraunces';
+@import 'tailwindcss';
 
-@theme {
-  --color-bg-main: var(--bg-primary);
-  --color-bg-card: var(--bg-secondary);
-  --color-accent: var(--accent-primary);
-  --color-accent-alt: var(--accent-secondary);
-  --color-text-main: var(--text-primary);
-  --color-text-muted: var(--text-secondary);
-  --font-dynamic: var(--font-main);
-  --radius-dynamic: var(--border-radius);
+/*
+ * Every colour in the app comes from these tokens, so a theme is only a set of
+ * values. The class names are the ids stored in users' configs, which is why
+ * they do not match the display names.
+ */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-on-danger: var(--on-danger);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Fraunces Variable', Georgia, 'Times New Roman', serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Consolas, 'DejaVu Sans Mono', 'Liberation Mono', monospace;
+
+  --shadow-card: var(--shadow-card-value);
+  --shadow-pop: var(--shadow-pop-value);
 }
 
-/* 1. Emerald Botanical (Default: Crisp, Fresh, Organic Light) */
-:root, .theme-minimalist {
-  --bg-primary: #F7F9F7;
-  --bg-secondary: #FFFFFF;
-  --accent-primary: #15803D;
-  --accent-secondary: #22C55E;
-  --text-primary: #0F172A;
-  --text-secondary: #64748B;
-  --font-main: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  --border-radius: 16px;
-  --border-style: 1px solid rgba(21, 128, 61, 0.14);
+/* Fern — the default light theme. */
+:root,
+.theme-minimalist {
+  color-scheme: light;
+  --bg: #f4f5f0;
+  --surface: #ffffff;
+  --sunken: #eceee7;
+  --line: #e0e3da;
+  --line-strong: #c9cec1;
+  --ink: #18211b;
+  --muted: #58635b;
+  --faint: #879189;
+  --accent: #2f6b3f;
+  --accent-hover: #245532;
+  --accent-soft: #e2ede1;
+  --on-accent: #ffffff;
+  --danger: #b42318;
+  --danger-soft: #fcebe9;
+  --on-danger: #ffffff;
+  --warn: #9a5a06;
+  --warn-soft: #fcf1df;
+  --shadow-card-value: 0 1px 2px rgb(24 33 27 / 0.05), 0 1px 1px rgb(24 33 27 / 0.03);
+  --shadow-pop-value: 0 12px 32px -8px rgb(24 33 27 / 0.22), 0 2px 6px rgb(24 33 27 / 0.08);
 }
 
-/* 2. Nordic Terracotta (Warm, Earthy, Nordic Clay) */
-.theme-gamified {
-  --bg-primary: #FAF6F0;
-  --bg-secondary: #FFFFFF;
-  --accent-primary: #C2410C;
-  --accent-secondary: #D97706;
-  --text-primary: #1C1917;
-  --text-secondary: #78716C;
-  --font-main: 'Outfit', system-ui, -apple-system, sans-serif;
-  --border-radius: 18px;
-  --border-style: 1px solid rgba(194, 65, 12, 0.15);
-}
-
-/* 3. Midnight Forest (Deep Obsidian, Jade Luminescence) */
+/* Night — dark. */
 .theme-cyber {
-  --bg-primary: #090D0B;
-  --bg-secondary: #131A16;
-  --accent-primary: #10B981;
-  --accent-secondary: #34D399;
-  --text-primary: #F8FAFC;
-  --text-secondary: #94A3B8;
-  --font-main: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  --border-radius: 16px;
-  --border-style: 1px solid rgba(16, 185, 129, 0.18);
+  color-scheme: dark;
+  --bg: #0e1310;
+  --surface: #151b17;
+  --sunken: #1b231e;
+  --line: #262f29;
+  --line-strong: #364139;
+  --ink: #e6ece7;
+  --muted: #9ba69e;
+  --faint: #6c776f;
+  --accent: #74c088;
+  --accent-hover: #8dcf9e;
+  --accent-soft: rgb(116 192 136 / 0.14);
+  --on-accent: #0a1a0f;
+  --danger: #f38b82;
+  --danger-soft: rgb(243 139 130 / 0.13);
+  --on-danger: #2b0b08;
+  --warn: #f0b458;
+  --warn-soft: rgb(240 180 88 / 0.13);
+  --shadow-card-value: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-pop-value: 0 16px 40px -8px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.4);
 }
 
-body {
-  @apply bg-bg-main text-text-main m-0 p-0 font-dynamic transition-colors duration-300 antialiased selection:bg-[var(--color-accent)]/20;
+/* Clay — warm light. */
+.theme-gamified {
+  color-scheme: light;
+  --bg: #f6f1e9;
+  --surface: #fffdf9;
+  --sunken: #efe7db;
+  --line: #e4d9ca;
+  --line-strong: #d1c2ae;
+  --ink: #2a1f17;
+  --muted: #6c5d50;
+  --faint: #998a7c;
+  --accent: #a94f28;
+  --accent-hover: #8e4121;
+  --accent-soft: #f5e2d7;
+  --on-accent: #ffffff;
+  --danger: #b42318;
+  --danger-soft: #fcebe9;
+  --on-danger: #ffffff;
+  --warn: #93600a;
+  --warn-soft: #fbf0dc;
+  --shadow-card-value: 0 1px 2px rgb(42 31 23 / 0.06), 0 1px 1px rgb(42 31 23 / 0.03);
+  --shadow-pop-value: 0 12px 32px -8px rgb(42 31 23 / 0.24), 0 2px 6px rgb(42 31 23 / 0.08);
 }
 
-.dynamic-border {
-  border: var(--border-style);
+/* In the base layer so utilities (focus rings, outline-none) can override it. */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Thin, theme-aware scrollbars everywhere rather than on opted-in elements. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border: 3px solid var(--bg);
+    border-radius: 999px;
+  }
 }
 
-.dynamic-shadow {
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
+/* Leaflet sits inside rounded cards; keep its chrome in the app's type. */
+.leaflet-container {
+  font-family: var(--font-sans);
+  background: var(--sunken);
+}
+.leaflet-popup-content {
+  font-size: 13px;
+  font-weight: 500;
 }
 
-.theme-cyber .dynamic-shadow {
-  box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.4), 0 0 1px 1px rgba(16, 185, 129, 0.12);
-}
-
-.theme-gamified .dynamic-shadow {
-  box-shadow: 0 6px 20px -3px rgba(194, 65, 12, 0.06), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
-}
-
-.custom-scrollbar::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--accent-primary);
-  opacity: 0.4;
-  border-radius: var(--border-radius);
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-secondary);
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

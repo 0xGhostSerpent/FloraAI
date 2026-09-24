@@ -1,95 +1,93 @@
-import { Droplets, Leaf, Sun, Wrench } from 'lucide-react';
-import { motion } from 'motion/react';
+import { Droplets, Leaf, RefreshCw, Sun, type LucideIcon } from 'lucide-react';
 import type { PlantStatus } from '../store';
-import ErrorCard from '../components/ErrorCard';
+import { Button, Card, cx, Disclaimer, Eyebrow, LoadingState, Notice, Page, PageHeader } from '../components/ui';
 
 type Props = {
   plantName: string;
+  image: string | null;
   status: PlantStatus | null;
   isLoading: boolean;
   error: string | null;
   onRetry: () => void;
+  onBack: () => void;
 };
 
-const OVERALL_LABEL: Record<PlantStatus['overall'], string> = {
-  healthy: 'Healthy',
-  stressed: 'Stressed',
-  declining: 'Declining',
-  unknown: 'Unclear',
+const OVERALL: Record<PlantStatus['overall'], { label: string; summary: string; dot: string; text: string }> = {
+  healthy: { label: 'Healthy', summary: 'Nothing needs fixing right now.', dot: 'bg-accent', text: 'text-accent' },
+  stressed: { label: 'Stressed', summary: 'Something is off, but it should recover.', dot: 'bg-warn', text: 'text-warn' },
+  declining: { label: 'Declining', summary: 'It needs attention soon.', dot: 'bg-danger', text: 'text-danger' },
+  unknown: { label: 'Unclear', summary: "The photo didn't show enough to judge.", dot: 'bg-faint', text: 'text-muted' },
 };
 
-const ROWS = [
-  { key: 'hydration', label: 'Hydration', icon: Droplets },
-  { key: 'leafCondition', label: 'Leaf condition', icon: Leaf },
+const ROWS: { key: 'hydration' | 'leafCondition' | 'lightAdequacy'; label: string; icon: LucideIcon }[] = [
+  { key: 'hydration', label: 'Water', icon: Droplets },
+  { key: 'leafCondition', label: 'Leaves', icon: Leaf },
   { key: 'lightAdequacy', label: 'Light', icon: Sun },
-] as const;
+];
 
-export default function StatusScreen({ plantName, status, isLoading, error, onRetry }: Props) {
+export default function StatusScreen({ plantName, image, status, isLoading, error, onRetry, onBack }: Props) {
+  const overall = status ? OVERALL[status.overall] : null;
+
   return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0 }}
-      className="px-6 pb-6 pt-2 space-y-5"
-    >
-      <div>
-        <h2 className="text-xl font-bold text-text-main leading-tight">{plantName}</h2>
-        <p className="text-xs text-text-muted mt-0.5">AI health assessment</p>
-      </div>
+    <Page className="space-y-7">
+      <PageHeader title="Health check" subtitle={plantName} onBack={onBack} />
 
-      {error && <ErrorCard message={error} onRetry={onRetry} />}
-
-      {isLoading && (
-        <div className="bg-bg-card dynamic-border rounded-[var(--radius-dynamic)] p-8 flex flex-col items-center gap-3">
-          <div className="w-6 h-6 border-2 border-[var(--color-accent)]/30 border-t-[var(--color-accent)] rounded-full animate-spin" />
-          <p className="text-sm text-text-muted font-medium">Assessing the photo…</p>
-        </div>
+      {error && (
+        <Notice
+          tone="danger"
+          title="Couldn't assess this photo"
+          action={
+            <Button size="sm" icon={RefreshCw} onClick={onRetry}>
+              Retry
+            </Button>
+          }
+        >
+          {error}
+        </Notice>
       )}
 
-      {status && !isLoading && (
+      {isLoading && (
+        <Card>
+          <LoadingState label="Looking at the leaves, soil and light…" />
+        </Card>
+      )}
+
+      {status && overall && !isLoading && (
         <>
-          <div className="bg-bg-card dynamic-border rounded-[var(--radius-dynamic)] p-5 flex items-center justify-between">
-            <div>
-              <p className="text-[10px] text-[var(--color-accent)] font-bold uppercase tracking-widest mb-1">
-                Overall
+          <Card className="flex items-center gap-5">
+            {image && <img src={image} alt="" className="h-20 w-20 shrink-0 rounded-xl object-cover" />}
+            <div className="min-w-0">
+              <p className={cx('flex items-center gap-2 font-display text-2xl font-semibold', overall.text)}>
+                <span className={cx('h-2.5 w-2.5 rounded-full', overall.dot)} />
+                {overall.label}
               </p>
-              <p className="text-lg font-bold text-text-main">{OVERALL_LABEL[status.overall]}</p>
+              <p className="mt-0.5 text-sm text-muted">{overall.summary}</p>
             </div>
-            <div className="w-12 h-12 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center text-[var(--color-accent)]">
-              <Leaf size={22} />
-            </div>
+          </Card>
+
+          <div className="rounded-2xl border border-accent/25 bg-accent-soft px-5 py-4">
+            <Eyebrow className="mb-1 text-accent">Do this next</Eyebrow>
+            <p className="text-[15px] font-medium leading-relaxed text-ink">{status.recommendedAction}</p>
           </div>
 
-          <div className="bg-bg-card dynamic-border rounded-[var(--radius-dynamic)] divide-y divide-text-muted/10">
+          <Card padded={false} className="divide-y divide-line">
             {ROWS.map(({ key, label, icon: Icon }) => (
-              <div key={key} className="p-4 flex gap-3 items-start">
-                <Icon size={18} className="text-[var(--color-accent)] shrink-0 mt-0.5" />
+              <div key={key} className="flex gap-4 px-5 py-4">
+                <Icon size={18} className="mt-0.5 shrink-0 text-muted" />
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-text-main">{label}</p>
-                  <p className="text-sm text-text-muted leading-relaxed mt-0.5">{status[key]}</p>
+                  <p className="text-[13px] font-semibold text-ink">{label}</p>
+                  <p className="mt-0.5 text-sm leading-relaxed text-muted">{status[key]}</p>
                 </div>
               </div>
             ))}
-          </div>
+          </Card>
 
-          <div className="bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30 rounded-[var(--radius-dynamic)] p-5 flex gap-3 items-start">
-            <Wrench size={20} className="text-[var(--color-accent)] shrink-0 mt-0.5" />
-            <div>
-              <p className="text-xs font-bold text-[var(--color-accent)] uppercase tracking-widest mb-1">
-                Do this next
-              </p>
-              <p className="text-sm text-text-main leading-relaxed font-medium">
-                {status.recommendedAction}
-              </p>
-            </div>
-          </div>
-
-          <p className="text-[10px] text-text-muted opacity-80 leading-relaxed text-center px-2">
-            AI assessment from a single photo. Informational only — it cannot replace inspecting the
-            plant yourself.
-          </p>
+          <Disclaimer>
+            Judged by AI from a single photo. Check the soil and the undersides of the leaves yourself before
+            acting on it.
+          </Disclaimer>
         </>
       )}
-    </motion.div>
+    </Page>
   );
 }

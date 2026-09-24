@@ -1,143 +1,258 @@
-import { useEffect, type ChangeEvent } from 'react';
-import { Camera, ChevronLeft, Upload } from 'lucide-react';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { Camera, ImagePlus, RefreshCw, ScanLine, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
-import ErrorCard from '../components/ErrorCard';
 import { useCamera } from '../hooks/useCamera';
+import { Button, Card, cx, Eyebrow, Notice, Page, PageHeader } from '../components/ui';
 
 type Props = {
+  mode: 'new_plant' | 'check_in';
+  /** The plant being checked in on, when mode is check_in. */
+  plantName?: string;
   selectedImage: string | null;
   isScanning: boolean;
   hasApiKey: boolean;
   scanError: string | null;
-  onCaptured: (dataUrl: string) => void;
-  onPickFile: (e: ChangeEvent<HTMLInputElement>) => void;
+  onImage: (dataUrl: string) => void;
+  onClear: () => void;
   onAnalyze: () => void;
+  onOpenSettings: () => void;
   onBack: () => void;
 };
 
+const TIPS = [
+  'Fill the frame with leaves, and flowers if it has them.',
+  'Daylight beats a lamp; avoid strong shadows.',
+  'One plant per photo.',
+];
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function ScannerScreen({
+  mode,
+  plantName,
   selectedImage,
   isScanning,
   hasApiKey,
   scanError,
-  onCaptured,
-  onPickFile,
+  onImage,
+  onClear,
   onAnalyze,
+  onOpenSettings,
   onBack,
 }: Props) {
   const { videoRef, state, start, stop, capture } = useCamera();
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
 
   // Release the camera as soon as there is an image to review.
   useEffect(() => {
     if (selectedImage) stop();
   }, [selectedImage, stop]);
 
+  const acceptFile = async (file: File | undefined | null) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    onImage(await readAsDataUrl(file));
+  };
+
+  // A screenshot or copied image can be pasted straight in.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const item = Array.from(e.clipboardData?.items ?? []).find((i) => i.type.startsWith('image/'));
+      if (item) void acceptFile(item.getAsFile());
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  });
+
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    void acceptFile(e.dataTransfer.files?.[0]);
+  };
+
   const takePhoto = () => {
     const shot = capture();
     if (shot) {
       stop();
-      onCaptured(shot);
+      onImage(shot);
     }
   };
 
+  const isCheckIn = mode === 'check_in';
+  const cameraMessage =
+    state === 'starting'
+      ? 'Starting camera…'
+      : state === 'denied'
+        ? 'Camera access was refused. You can still choose a photo.'
+        : state === 'unavailable'
+          ? 'No camera found. You can still choose a photo.'
+          : null;
+
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0 }}
-      className="p-6 flex flex-col items-center flex-1 h-full min-h-[70vh] gap-6"
-    >
-      <div className="w-full relative rounded-[var(--radius-dynamic)] overflow-hidden bg-black aspect-[3/4] max-h-[55vh] shadow-lg dynamic-border">
-        {selectedImage ? (
-          <img
-            src={selectedImage}
-            alt="Preview"
-            className={`w-full h-full object-cover ${isScanning ? 'opacity-50 blur-sm' : 'opacity-100'} transition-all`}
-          />
-        ) : (
-          <video ref={videoRef} playsInline muted className="w-full h-full object-cover" />
-        )}
+    <Page wide className="space-y-7">
+      <PageHeader
+        title={isCheckIn ? `Check in on ${plantName ?? 'your plant'}` : 'Identify a plant'}
+        subtitle={
+          isCheckIn
+            ? "Take today's photo. Flora compares it with how the plant looked before."
+            : 'Photograph it with your webcam, or bring in a photo you already have.'
+        }
+        onBack={onBack}
+      />
 
-        {isScanning && (
-          <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden mix-blend-screen">
-            <motion.div
-              className="w-full h-2 bg-[var(--color-accent)] shadow-[0_0_30px_5px_var(--color-accent)]"
-              animate={{ y: ['-10%', '600px', '-10%'] }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
-            />
-          </div>
-        )}
-
-        {!selectedImage && state !== 'live' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6 gap-4 text-white/70">
-            <Camera size={40} />
-            <p className="text-sm font-medium">
-              {state === 'starting'
-                ? 'Starting camera…'
-                : state === 'denied'
-                  ? 'Camera permission was refused.'
-                  : state === 'unavailable'
-                    ? 'No camera found on this computer.'
-                    : 'Use your camera, or upload a photo.'}
-            </p>
-          </div>
-        )}
-
-        {!isScanning && (
-          <button
-            onClick={onBack}
-            className="absolute top-4 left-4 w-10 h-10 flex items-center justify-center bg-black/50 text-white rounded-full backdrop-blur border border-white/20 hover:bg-black/70"
-          >
-            <ChevronLeft size={20} />
-          </button>
-        )}
-      </div>
-
-      {scanError && <ErrorCard message={scanError} onRetry={onAnalyze} />}
-
-      {selectedImage ? (
-        <button
-          onClick={onAnalyze}
-          disabled={isScanning || !hasApiKey}
-          className="w-full bg-[var(--color-accent)] disabled:opacity-50 disabled:grayscale text-bg-main py-4 rounded-[var(--radius-dynamic)] font-bold shadow-lg transition-all flex justify-center items-center gap-2 text-lg active:scale-95"
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          className={cx(
+            'relative aspect-[4/3] w-full overflow-hidden rounded-2xl',
+            selectedImage || state === 'live'
+              ? 'bg-black shadow-card'
+              : 'border-2 border-dashed transition-colors',
+            !selectedImage && state !== 'live' && (dragging ? 'border-accent bg-accent-soft' : 'border-line-strong bg-sunken'),
+          )}
         >
-          {isScanning ? (
-            <span className="flex items-center gap-3">
-              <span className="w-5 h-5 border-2 border-bg-main/30 border-t-bg-main rounded-full animate-spin" />
-              Analyzing…
-            </span>
-          ) : !hasApiKey ? (
-            'API Key Missing (Settings)'
+          {selectedImage ? (
+            <img
+              src={selectedImage}
+              alt="Selected plant"
+              className={cx('h-full w-full object-contain transition-[filter,opacity]', isScanning && 'opacity-60 blur-[2px]')}
+            />
           ) : (
-            'Analyze Plant'
-          )}
-        </button>
-      ) : (
-        <div className="w-full flex flex-col gap-3">
-          {state === 'live' ? (
-            <button
-              onClick={takePhoto}
-              className="w-full bg-[var(--color-accent)] text-bg-main py-4 rounded-[var(--radius-dynamic)] font-bold shadow-lg active:scale-95 transition-transform text-lg flex justify-center items-center gap-2"
-            >
-              <Camera size={20} /> Take photo
-            </button>
-          ) : (
-            <button
-              onClick={start}
-              disabled={state === 'starting'}
-              className="w-full bg-[var(--color-accent)] disabled:opacity-50 text-bg-main py-4 rounded-[var(--radius-dynamic)] font-bold shadow-lg active:scale-95 transition-transform text-lg flex justify-center items-center gap-2"
-            >
-              <Camera size={20} /> Use camera
-            </button>
+            <video
+              ref={videoRef}
+              playsInline
+              muted
+              className={cx('h-full w-full object-cover', state !== 'live' && 'hidden')}
+            />
           )}
 
-          {/* Always available: many desktops have no webcam at all. */}
-          <label className="w-full cursor-pointer bg-bg-card text-text-main dynamic-border py-4 rounded-[var(--radius-dynamic)] font-bold text-sm hover:brightness-95 transition-all flex justify-center items-center gap-2">
-            <Upload size={18} /> Upload an image
-            <input type="file" accept="image/*" className="hidden" onChange={onPickFile} />
-          </label>
+          {!selectedImage && state !== 'live' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-8 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface text-accent shadow-card">
+                <ImagePlus size={22} />
+              </div>
+              <p className="text-sm font-medium text-ink">{dragging ? 'Drop to use this photo' : 'Drop a photo here'}</p>
+              <p className="max-w-xs text-[13px] text-muted">{cameraMessage ?? 'or paste one with Ctrl+V'}</p>
+            </div>
+          )}
+
+          {isScanning && (
+            <div className="pointer-events-none absolute inset-0">
+              <motion.div
+                className="h-0.5 w-full bg-white/90 shadow-[0_0_24px_6px_rgba(255,255,255,0.45)]"
+                animate={{ top: ['8%', '92%', '8%'] }}
+                style={{ position: 'absolute' }}
+                transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+              />
+            </div>
+          )}
         </div>
-      )}
-    </motion.div>
+
+        <div className="flex flex-col gap-5">
+          {!hasApiKey && (
+            <Notice
+              tone="warn"
+              title="No AI key yet"
+              action={
+                <Button size="sm" onClick={onOpenSettings}>
+                  Settings
+                </Button>
+              }
+            >
+              Add one in Settings to analyse photos.
+            </Notice>
+          )}
+
+          {scanError && (
+            <Notice
+              tone="danger"
+              title="That didn't work"
+              action={
+                <Button size="sm" icon={RefreshCw} onClick={onAnalyze} disabled={isScanning}>
+                  Retry
+                </Button>
+              }
+            >
+              {scanError}
+            </Notice>
+          )}
+
+          {selectedImage ? (
+            <div className="space-y-2.5">
+              <Button
+                variant="primary"
+                size="lg"
+                block
+                icon={isCheckIn ? Sparkles : ScanLine}
+                loading={isScanning}
+                disabled={!hasApiKey}
+                onClick={onAnalyze}
+              >
+                {isScanning ? 'Looking closely…' : isCheckIn ? 'Save check-in' : 'Identify plant'}
+              </Button>
+              <Button variant="ghost" block disabled={isScanning} onClick={onClear}>
+                Use a different photo
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {state === 'live' ? (
+                <Button variant="primary" size="lg" block icon={Camera} onClick={takePhoto}>
+                  Take photo
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="lg"
+                  block
+                  icon={Camera}
+                  loading={state === 'starting'}
+                  onClick={() => void start()}
+                >
+                  Use webcam
+                </Button>
+              )}
+              <Button size="lg" block icon={ImagePlus} onClick={() => fileInput.current?.click()}>
+                Choose a photo…
+              </Button>
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  void acceptFile(e.target.files?.[0]);
+                  e.target.value = '';
+                }}
+              />
+            </div>
+          )}
+
+          <Card className="bg-sunken shadow-none">
+            <Eyebrow className="mb-2.5">For the best result</Eyebrow>
+            <ul className="space-y-2 text-[13px] leading-relaxed text-muted">
+              {TIPS.map((tip) => (
+                <li key={tip} className="flex gap-2.5">
+                  <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-accent" />
+                  {tip}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+      </div>
+    </Page>
   );
 }

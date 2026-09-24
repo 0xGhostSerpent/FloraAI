@@ -1,226 +1,130 @@
-import {
-  AlertTriangle,
-  Camera,
-  CheckCircle2,
-  Cloud,
-  CloudCheck,
-  Info,
-  Leaf,
-  Lock,
-  RefreshCw,
-  Settings as SettingsIcon,
-  Sun,
-  Unlock,
-} from 'lucide-react';
-import { motion } from 'motion/react';
+import { AlertTriangle, Check, KeyRound, ScanLine, Sprout } from 'lucide-react';
 import type { PlantData } from '../store';
-import { getTodayDateId } from '../lib/dates';
+import { formatDateId, getTodayDateId, parseDateId } from '../lib/dates';
+import { Badge, Button, EmptyState, Notice, Page, PageHeader } from '../components/ui';
 
 type Props = {
   plants: PlantData[];
-  streak: number;
-  appTheme: string;
-  lastCheckInDate: string | null;
   hasApiKey: boolean;
-  driveSyncing?: boolean;
-  lastDriveSync?: number | null;
   onOpenSettings: () => void;
   onOpenPlant: (plant: PlantData) => void;
+  onIdentify: () => void;
 };
 
-function StreakIcon({ appTheme, streak }: { appTheme: string; streak: number }) {
-  if (appTheme === 'theme-gamified') {
-    return (
-      <div className="flex items-center gap-1.5 bg-bg-card px-3 py-1 rounded-full dynamic-border dynamic-shadow">
-        <span className="w-2 h-2 rounded-full bg-[var(--color-accent)] animate-pulse" />
-        <span className="font-bold text-xs text-[var(--color-accent)]">
-          {streak}d Streak
-        </span>
-      </div>
-    );
+/** The most recent check-in id, or null for a plant that has none. */
+function lastCheckIn(plant: PlantData): string | null {
+  let latest: { id: string; time: number } | null = null;
+  for (const checkIn of plant.checkIns ?? []) {
+    const time = parseDateId(checkIn.dateId)?.getTime() ?? 0;
+    if (!latest || time > latest.time) latest = { id: checkIn.dateId, time };
   }
-  if (appTheme === 'theme-cyber') {
-    return (
-      <div className="flex items-center gap-1.5 bg-bg-card px-3 py-1 rounded-full dynamic-border dynamic-shadow">
-        <span className="w-2 h-2 rounded-full bg-[var(--color-accent)] shadow-[0_0_8px_var(--color-accent)]" />
-        <span className="font-bold text-xs text-[var(--color-accent)] tracking-wide">
-          {streak}d Link
-        </span>
-      </div>
-    );
-  }
-  return (
-    <div className="flex items-center gap-1.5 bg-bg-card px-3 py-1 rounded-full dynamic-border dynamic-shadow">
-      <Sun size={14} className={streak > 0 ? 'text-amber-500 fill-amber-500/20' : 'text-neutral-400'} />
-      <span className={`text-xs font-bold ${streak > 0 ? 'text-[var(--color-accent)]' : 'text-neutral-500'}`}>
-        {streak}d Streak
-      </span>
-    </div>
-  );
+  return latest?.id ?? null;
 }
 
-export default function HomeScreen({
-  plants,
-  streak,
-  appTheme,
-  lastCheckInDate,
-  hasApiKey,
-  driveSyncing,
-  lastDriveSync,
-  onOpenSettings,
-  onOpenPlant,
-}: Props) {
-  const checkedInToday = lastCheckInDate === getTodayDateId();
+function PlantCard({ plant, onOpen }: { plant: PlantData; onOpen: () => void }) {
+  const today = getTodayDateId();
+  const last = lastCheckIn(plant);
+  const checkedIn = last === today;
+  const photos = plant.checkIns?.length ?? 0;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      className="px-5 py-6 space-y-5"
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-surface text-left shadow-card transition-[box-shadow,transform,border-color] hover:-translate-y-0.5 hover:border-line-strong hover:shadow-pop"
     >
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-black flex items-center gap-2 tracking-tight">
-            <Leaf className="w-6 h-6 text-[var(--color-accent)]" /> Flora{' '}
-            <span className="text-[var(--color-accent)] font-medium -ml-1.5">AI</span>
-          </h1>
-          {lastDriveSync ? (
-            <p className="text-[10px] text-text-muted font-medium flex items-center gap-1 mt-0.5">
-              {driveSyncing ? (
-                <>
-                  <RefreshCw size={10} className="animate-spin text-[var(--color-accent)]" /> Syncing to Google Drive…
-                </>
-              ) : (
-                <>
-                  <Cloud size={10} className="text-[var(--color-accent)]" /> Synced to Drive
-                </>
-              )}
-            </p>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-2.5">
-          <StreakIcon appTheme={appTheme} streak={streak} />
-          <button
-            onClick={onOpenSettings}
-            className="w-10 h-10 bg-bg-card rounded-full flex items-center justify-center dynamic-border shadow-sm hover:brightness-110 active:scale-95 transition-all"
-            aria-label="Settings"
-          >
-            <SettingsIcon size={18} className="text-text-main" />
-          </button>
-        </div>
-      </header>
-
-      <div className="bg-bg-card dynamic-shadow dynamic-border p-4.5 flex justify-between items-center rounded-[var(--radius-dynamic)]">
-        <div>
-          <p className="text-[11px] text-[var(--color-accent)] font-bold tracking-wider uppercase mb-0.5">
-            Daily Care Check-in
-          </p>
-          <p className="font-semibold text-sm text-text-main">
-            {checkedInToday ? 'Garden check-in completed!' : 'Check in with a plant photo'}
-          </p>
-        </div>
-        <div
-          className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-            checkedInToday
-              ? 'bg-[var(--color-accent)] text-bg-main shadow-md'
-              : 'bg-bg-main border border-text-muted/30 text-text-muted'
-          }`}
-        >
-          {checkedInToday ? <CheckCircle2 size={20} /> : <Camera size={18} />}
-        </div>
-      </div>
-
-      {!hasApiKey && (
-        <div
-          className="bg-amber-500/10 border border-amber-500/30 rounded-[var(--radius-dynamic)] p-4 flex gap-3.5 items-start cursor-pointer hover:bg-amber-500/15 transition-colors"
-          onClick={onOpenSettings}
-        >
-          <Info size={20} className="text-amber-500 shrink-0 mt-0.5" />
-          <div>
-            <h3 className="font-bold text-amber-500 text-xs uppercase tracking-wider mb-0.5">Setup AI Key</h3>
-            <p className="text-xs text-text-muted leading-relaxed">
-              Configure your Gemini or AI API Key in settings to enable identification and chatbot.
-            </p>
-          </div>
-        </div>
-      )}
-
-      <div>
-        <div className="flex justify-between items-center mb-3.5">
-          <h2 className="text-lg font-bold text-text-main">Your Garden</h2>
-          <span className="text-xs font-semibold px-2.5 py-0.5 bg-bg-card rounded-full dynamic-border text-text-muted">
-            {plants.length} {plants.length === 1 ? 'specimen' : 'specimens'}
-          </span>
-        </div>
-
-        {plants.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-8 text-center space-y-4 bg-bg-card dynamic-shadow dynamic-border rounded-[var(--radius-dynamic)]">
-            <div className="w-14 h-14 bg-[var(--color-accent)]/10 rounded-full flex items-center justify-center text-[var(--color-accent)]">
-              <Leaf size={28} />
-            </div>
-            <div>
-              <h3 className="font-bold text-text-main text-sm mb-1">Your Garden is Empty</h3>
-              <p className="text-xs text-text-muted leading-relaxed max-w-xs">
-                Take a photo or scan any houseplant, flower, or tree to start tracking and chatting with your botanical avatars.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3.5">
-            {plants.map((plant) => {
-              const hasCheckedInToday = plant.checkIns?.some((c) => c.dateId === getTodayDateId());
-              return (
-                <div
-                  key={plant.id}
-                  onClick={() => onOpenPlant(plant)}
-                  className="bg-bg-card dynamic-shadow overflow-hidden cursor-pointer group hover:brightness-95 active:scale-[0.98] transition-all flex flex-col h-[220px] relative dynamic-border rounded-[var(--radius-dynamic)] justify-between"
-                >
-                  <div className="absolute top-2.5 right-2.5 z-20 w-6 h-6 rounded-full bg-bg-main/80 backdrop-blur flex items-center justify-center dynamic-border shadow-sm">
-                    {hasCheckedInToday ? (
-                      <Unlock size={12} className="text-[var(--color-accent)]" />
-                    ) : (
-                      <Lock size={12} className="text-text-muted" />
-                    )}
-                  </div>
-
-                  {plant.isToxic && (
-                    <div className="absolute top-2.5 left-2.5 z-20 px-1.5 py-0.5 rounded bg-red-500/90 backdrop-blur text-white text-[9px] font-black uppercase tracking-wider flex items-center gap-0.5 shadow-sm">
-                      <AlertTriangle size={9} /> Toxic
-                    </div>
-                  )}
-
-                  {/* Standardized Aspect Ratio Image Container */}
-                  <div className="h-[140px] w-full bg-bg-main relative overflow-hidden shrink-0">
-                    <img
-                      src={plant.imageUrl}
-                      alt={plant.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-50"></div>
-                  </div>
-
-                  {/* Standardized Meta Footer */}
-                  <div className="p-3 bg-bg-card flex-1 flex flex-col justify-center border-t border-text-muted/10">
-                    <h3 className="font-bold text-text-main text-xs truncate leading-tight">
-                      {plant.name}
-                    </h3>
-                    <div className="flex items-center justify-between text-[10px] text-text-muted mt-1 font-medium">
-                      <span className="truncate italic max-w-[80px]">
-                        {plant.scientificName || 'Botanic avatar'}
-                      </span>
-                      <span className="shrink-0 text-[var(--color-accent)] font-semibold">
-                        {plant.checkIns?.length || 1} check-in{(plant.checkIns?.length || 1) !== 1 ? 's' : ''}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      <div className="relative aspect-[4/3] w-full overflow-hidden bg-sunken">
+        <img
+          src={plant.imageUrl}
+          alt=""
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+        />
+        {plant.isToxic && (
+          <Badge tone="danger" icon={AlertTriangle} className="absolute left-3 top-3 bg-surface/95 shadow-card">
+            Toxic
+          </Badge>
         )}
       </div>
-    </motion.div>
+      <div className="flex flex-1 flex-col px-4 pb-4 pt-3.5">
+        <h3 className="truncate font-display text-[17px] font-semibold leading-snug text-ink">{plant.name}</h3>
+        <p className="truncate text-[13px] italic text-muted">{plant.scientificName || ' '}</p>
+        <div className="mt-3 flex items-center justify-between gap-2 text-xs">
+          {checkedIn ? (
+            <span className="inline-flex items-center gap-1 font-medium text-accent">
+              <Check size={13} strokeWidth={2.6} /> Checked in today
+            </span>
+          ) : (
+            <span className="truncate text-faint">{last ? `Last check-in ${formatDateId(last).replace(/^Yesterday$/, 'yesterday')}` : 'No check-ins yet'}</span>
+          )}
+          <span className="shrink-0 text-faint tabular-nums">
+            {photos} photo{photos === 1 ? '' : 's'}
+          </span>
+        </div>
+      </div>
+    </button>
   );
 }
 
+export default function HomeScreen({ plants, hasApiKey, onOpenSettings, onOpenPlant, onIdentify }: Props) {
+  const today = getTodayDateId();
+  const doneToday = plants.filter((p) => p.checkIns?.some((c) => c.dateId === today)).length;
+
+  const subtitle =
+    plants.length === 0
+      ? 'Plants you identify and save will appear here.'
+      : `${plants.length} plant${plants.length === 1 ? '' : 's'} · ${doneToday} checked in today`;
+
+  return (
+    <Page wide className="space-y-7">
+      <PageHeader
+        title="Your garden"
+        subtitle={subtitle}
+        actions={
+          plants.length > 0 && (
+            <Button variant="primary" icon={ScanLine} onClick={onIdentify}>
+              Identify a plant
+            </Button>
+          )
+        }
+      />
+
+      {!hasApiKey && (
+        <Notice
+          tone="warn"
+          icon={KeyRound}
+          title="Add an AI key to get started"
+          action={
+            <Button size="sm" onClick={onOpenSettings}>
+              Open settings
+            </Button>
+          }
+        >
+          Identification, health checks and chat all run on an AI model you choose. Gemini has a free tier.
+        </Notice>
+      )}
+
+      {plants.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-line-strong">
+          <EmptyState
+            icon={Sprout}
+            title="Nothing growing yet"
+            action={
+              <Button variant="primary" icon={ScanLine} onClick={onIdentify}>
+                Identify your first plant
+              </Button>
+            }
+          >
+            Photograph a houseplant, flower or tree. Flora names it, checks its health, and keeps a photo
+            diary as you check in on it.
+          </EmptyState>
+        </div>
+      ) : (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-5">
+          {plants.map((plant) => (
+            <PlantCard key={plant.id} plant={plant} onOpen={() => onOpenPlant(plant)} />
+          ))}
+        </div>
+      )}
+    </Page>
+  );
+}

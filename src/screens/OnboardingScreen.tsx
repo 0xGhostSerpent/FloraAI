@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
-import { Cloud, Leaf, LogIn, Sparkles, UserPlus, Zap } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Activity, ArrowRight, CloudUpload, Leaf, Mail, MapPin, ScanLine, Store, type LucideIcon } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { FloraUser } from '../firebase';
+import { Button, Field, Input, Notice } from '../components/ui';
 
 type Props = {
   onAccept: () => void;
@@ -13,6 +14,13 @@ type Props = {
   currentUser: FloraUser | null;
 };
 
+const FEATURES: { icon: LucideIcon; title: string; detail: string }[] = [
+  { icon: ScanLine, title: 'Identify from a photo', detail: 'Name, care needs, and whether it is toxic to pets.' },
+  { icon: Activity, title: 'Check on its health', detail: 'Water, leaves and light, with one thing to do next.' },
+  { icon: Store, title: 'Find it nearby', detail: 'Nurseries on a map, with a rough local price.' },
+  { icon: MapPin, title: 'See where it grows wild', detail: 'Real recorded sightings and its native range.' },
+];
+
 export default function OnboardingScreen({
   onAccept,
   onInstantSignIn,
@@ -22,141 +30,135 @@ export default function OnboardingScreen({
   authError,
   currentUser,
 }: Props) {
-  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [showEmail, setShowEmail] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  // If user is already signed in, let them proceed directly
+  // Someone already signed in has nothing to choose here.
   useEffect(() => {
-    if (currentUser) {
-      onAccept();
-    }
+    if (currentUser) onAccept();
   }, [currentUser, onAccept]);
 
+  const canSubmit = !isSigningIn && email.trim().length > 0 && password.length > 0;
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 15 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex-1 flex flex-col p-6 sm:p-8 items-center justify-center text-center z-10 relative max-w-lg mx-auto w-full"
-    >
-      {/* Brand Icon & Heading */}
-      <div className="w-20 h-20 bg-[var(--color-accent)]/10 rounded-3xl flex items-center justify-center mb-5 border border-[var(--color-accent)]/20 shadow-md">
-        <Leaf size={40} className="text-[var(--color-accent)]" />
-      </div>
-
-      <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-text-main mb-1.5 flex items-center gap-1.5">
-        Flora <span className="text-[var(--color-accent)]">AI</span>
-      </h1>
-      <p className="text-text-muted text-sm sm:text-base font-medium mb-6">
-        Intelligent Botanical Companion &amp; Garden Manager
-      </p>
-
-      {/* Cloud & Drive Highlights Box */}
-      <div className="w-full bg-bg-card dynamic-border rounded-[var(--radius-dynamic)] p-5 text-left mb-6 dynamic-shadow space-y-3">
-        <div className="flex items-center gap-2 text-text-main font-bold text-sm">
-          <Cloud size={18} className="text-[var(--color-accent)]" />
-          <span>Automatic Cloud Garden Backup</span>
-        </div>
-        <p className="text-xs text-text-muted leading-relaxed">
-          Sync your plant collection, daily check-in photos, care streaks, and botanical AI chat histories securely to the cloud.
-        </p>
-
-        <div className="pt-2 border-t border-text-muted/10 grid grid-cols-2 gap-2 text-[11px] text-text-muted">
-          <div className="flex items-center gap-1.5 font-medium">
-            <Sparkles size={12} className="text-[var(--color-accent)] shrink-0" />
-            <span>Multi-Device Sync</span>
+    <div className="flex min-h-full items-center justify-center overflow-y-auto px-8 py-12">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: 'easeOut' }}
+        className="grid w-full max-w-5xl gap-14 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:items-center"
+      >
+        <div>
+          <div className="mb-10 flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-on-accent">
+              <Leaf size={19} strokeWidth={2.4} />
+            </div>
+            <span className="font-display text-2xl font-semibold text-ink">Flora</span>
           </div>
-          <div className="flex items-center gap-1.5 font-medium">
-            <Sparkles size={12} className="text-[var(--color-accent)] shrink-0" />
-            <span>AI Chat History Backup</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="w-full space-y-3">
-        {/* 1. Primary Action: Instant 1-Click Cloud Account */}
-        <button
-          onClick={() => void onInstantSignIn()}
-          disabled={isSigningIn}
-          className="w-full bg-[var(--color-accent)] text-bg-main py-4 rounded-[var(--radius-dynamic)] font-bold text-sm shadow-md hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 disabled:opacity-50"
-        >
-          <Zap size={18} />
-          {isSigningIn ? 'Connecting to Cloud…' : 'Start Instant Cloud Account (1-Click)'}
-        </button>
-
-        {/* 2. Secondary Action: Email Sign In / Sign Up */}
-        {!showEmailForm ? (
-          <button
-            type="button"
-            onClick={() => setShowEmailForm(true)}
-            className="w-full bg-bg-card dynamic-border text-text-main py-3 rounded-xl font-bold text-xs hover:bg-bg-card/80 transition-all flex items-center justify-center gap-2"
-          >
-            <UserPlus size={14} className="text-[var(--color-accent)]" /> Sign In or Create Account with Email
-          </button>
-        ) : (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            className="w-full bg-bg-card dynamic-border rounded-2xl p-4 text-left space-y-3 text-xs dynamic-shadow"
-          >
-            <div className="space-y-1">
-              <label className="text-[11px] font-bold text-text-main">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="your.email@example.com"
-                className="w-full bg-bg-main border border-text-muted/20 rounded-lg px-3 py-2 text-xs text-text-main focus:outline-none focus:border-[var(--color-accent)]"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[11px] font-bold text-text-main">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password (min 6 characters)"
-                className="w-full bg-bg-main border border-text-muted/20 rounded-lg px-3 py-2 text-xs text-text-main focus:outline-none focus:border-[var(--color-accent)]"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => void onEmailSignIn(email, password)}
-                disabled={isSigningIn || !email.trim() || !password.trim()}
-                className="py-2.5 rounded-lg bg-[var(--color-accent)] text-bg-main font-bold text-xs hover:brightness-110 shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40"
-              >
-                <LogIn size={13} /> Sign In
-              </button>
-              <button
-                type="button"
-                onClick={() => void onEmailSignUp(email, password)}
-                disabled={isSigningIn || !email.trim() || !password.trim()}
-                className="py-2.5 rounded-lg bg-bg-main border border-[var(--color-accent)]/30 text-text-main font-bold text-xs hover:bg-bg-card active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40"
-              >
-                <UserPlus size={13} className="text-[var(--color-accent)]" /> Create Account
-              </button>
-            </div>
-          </motion.div>
-        )}
-
-        {authError && (
-          <p className="text-xs text-red-500 bg-red-500/10 p-2.5 rounded-xl border border-red-500/20 font-medium">
-            {authError}
+          <h1 className="font-display text-[44px] font-semibold leading-[1.08] tracking-[-0.02em] text-ink">
+            Know every plant
+            <br />
+            you grow.
+          </h1>
+          <p className="mt-4 max-w-md text-[15px] leading-relaxed text-muted">
+            Photograph a plant to find out what it is and how it's doing, then keep a diary of it as it grows.
           </p>
-        )}
+          <ul className="mt-9 grid gap-x-8 gap-y-6 sm:grid-cols-2">
+            {FEATURES.map(({ icon: Icon, title, detail }) => (
+              <li key={title} className="flex gap-3">
+                <Icon size={18} className="mt-0.5 shrink-0 text-accent" />
+                <div>
+                  <p className="text-sm font-semibold text-ink">{title}</p>
+                  <p className="mt-0.5 text-[13px] leading-snug text-muted">{detail}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
 
-        {/* 3. Offline / Guest */}
-        <button
-          onClick={onAccept}
-          className="w-full bg-transparent text-text-muted hover:text-text-main py-2.5 rounded-xl font-bold text-xs hover:bg-bg-card/50 transition-colors"
-        >
-          Continue as Guest (Offline Mode)
-        </button>
-      </div>
-    </motion.div>
+        <div className="rounded-2xl border border-line bg-surface p-7 shadow-pop">
+          <h2 className="text-lg font-semibold text-ink">Get started</h2>
+          <p className="mt-1 text-sm leading-relaxed text-muted">
+            Your garden is saved on this computer. An account is optional and only adds an online backup.
+          </p>
+
+          <Button variant="primary" size="lg" block className="mt-6" onClick={onAccept}>
+            Start using Flora <ArrowRight size={16} />
+          </Button>
+
+          <div className="my-6 flex items-center gap-3 text-xs text-faint">
+            <span className="h-px flex-1 bg-line" /> or back up online <span className="h-px flex-1 bg-line" />
+          </div>
+
+          {showEmail ? (
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (canSubmit) void onEmailSignIn(email.trim(), password);
+              }}
+            >
+              <Field label="Email" htmlFor="onboard-email">
+                <Input
+                  id="onboard-email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoFocus
+                />
+              </Field>
+              <Field label="Password" htmlFor="onboard-password" hint="At least 6 characters.">
+                <Input
+                  id="onboard-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </Field>
+              <div className="flex gap-2">
+                <Button type="submit" variant="primary" className="flex-1" disabled={!canSubmit} loading={isSigningIn}>
+                  Sign in
+                </Button>
+                <Button
+                  className="flex-1"
+                  disabled={!canSubmit}
+                  onClick={() => void onEmailSignUp(email.trim(), password)}
+                >
+                  Create account
+                </Button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEmail(false)}
+                className="w-full text-center text-[13px] font-medium text-muted hover:text-ink"
+              >
+                Back
+              </button>
+            </form>
+          ) : (
+            <div className="space-y-2.5">
+              <Button block icon={Mail} onClick={() => setShowEmail(true)}>
+                Sign in with email
+              </Button>
+              <Button block icon={CloudUpload} loading={isSigningIn} onClick={() => void onInstantSignIn()}>
+                Back up without an email
+              </Button>
+              <p className="pt-1 text-xs leading-relaxed text-faint">
+                Without an email, the backup is tied to this installation and can't be recovered on another computer.
+              </p>
+            </div>
+          )}
+
+          {authError && (
+            <Notice tone="danger" className="mt-4">
+              {authError}
+            </Notice>
+          )}
+        </div>
+      </motion.div>
+    </div>
   );
 }

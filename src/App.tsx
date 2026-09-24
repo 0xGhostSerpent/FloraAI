@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef, type ChangeEvent } from 'react';
-import { ChevronLeft, Leaf, ScanLine, Store, WifiOff } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
 import { AnimatePresence } from 'motion/react';
 import {
   auth,
@@ -21,6 +20,7 @@ import {
   saveChatHistory,
   getAppConfig,
   saveAppConfig,
+  clearAllData,
   PlantData,
   ChatMessage,
   type AppConfig,
@@ -39,7 +39,7 @@ import {
   type PriceEstimate,
   type UserLocation,
 } from './store';
-import { getTodayDateId, getYesterdayDateId } from './lib/dates';
+import { getTodayDateId, getYesterdayDateId, parseDateId } from './lib/dates';
 import {
   assessStatus,
   chat,
@@ -68,9 +68,11 @@ import WildScreen from './screens/WildScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
 import HomeScreen from './screens/HomeScreen';
 import ScannerScreen from './screens/ScannerScreen';
-import ChatScreen from './screens/ChatScreen';
+import PlantScreen from './screens/PlantScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import Sidebar, { type Section } from './components/Sidebar';
+import { Spinner, Toast, type ToastMessage } from './components/ui';
 
 type Screen =
   | 'home'
@@ -88,6 +90,22 @@ const LEGACY_KEY_SECRET = 'gemini_api_key';
 
 /** Each provider gets its own slot, so switching never overwrites another key. */
 const keyNameFor = (provider: AiProvider): string => `ai_api_key_${provider}`;
+
+/** 'theme-system' follows the OS; every other id is applied as-is. */
+function useResolvedTheme(theme: string): string {
+  const query = '(prefers-color-scheme: dark)';
+  const [prefersDark, setPrefersDark] = useState(() => window.matchMedia(query).matches);
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const onChange = () => setPrefersDark(media.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+
+  if (theme !== 'theme-system') return theme;
+  return prefersDark ? 'theme-cyber' : 'theme-minimalist';
+}
 
 export default function App() {
   const [isInitializing, setIsInitializing] = useState(true);
@@ -111,6 +129,17 @@ export default function App() {
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
   const [appTheme, setAppTheme] = useState('theme-minimalist');
+  const resolvedTheme = useResolvedTheme(appTheme);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const notify = (message: string, tone: ToastMessage['tone'] = 'success') =>
+    setToast({ id: Date.now(), message, tone });
+
+  // Tokens live on :root so dialogs, the map and the scrollbar all follow the theme.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('theme-minimalist', 'theme-cyber', 'theme-gamified');
+    root.classList.add(resolvedTheme);
+  }, [resolvedTheme]);
 
   // AI key state. `keyIsSaved` tracks what actually reached the key store, so
   // the UI stops claiming "Key saved" while the user is still typing.
@@ -158,6 +187,7 @@ export default function App() {
 
   // Plant status
   const [status, setStatus] = useState<PlantStatus | null>(null);
+  const [statusImage, setStatusImage] = useState<string | null>(null);
   const [isStatusLoading, setIsStatusLoading] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
 
@@ -317,10 +347,7 @@ export default function App() {
           localStorage.setItem('flora_active_user', JSON.stringify(user));
           void triggerDriveSync(loadedPlants, undefined, user);
         } else {
-          const local = getStoredActiveUser();
-          if (local) {
-            setCurrentUser(local);
-          }
+          setCurrentUser(getStoredActiveUser());
         }
         setIsInitializing(false);
       });
@@ -493,39 +520,21 @@ export default function App() {
     localStorage.setItem('flora_onboarded', 'true');
   };
 
-  const handleCameraCapture = (
-    e: ChangeEvent<HTMLInputElement>,
-    mode: 'new_plant' | 'check_in' = 'new_plant',
-  ) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setScanMode(mode);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setSelectedImage(reader.result as string);
-        setScanResult(null);
-        setScanError(null);
-        setShowToxicAlert(false);
-        setCurrentScreen('scanner');
-      };
-      reader.readAsDataURL(file);
-    }
-    e.target.value = '';
-  };
-
   const goBack = () => {
     if (currentScreen === 'history') setCurrentScreen('chat');
-    else if (currentScreen === 'status' || currentScreen === 'wild') {
+    else if (currentScreen === 'scanner' && scanMode === 'check_in' && activePlantDetails) {
+      setSelectedImage(null);
+      setCurrentScreen('chat');
+    } else if (currentScreen === 'status' || currentScreen === 'wild') {
       // These are reached from a fresh scan or from a saved plant.
       setCurrentScreen(scanResult ? 'scanResult' : activePlantDetails ? 'chat' : 'home');
     } else if (currentScreen === 'nurseries') {
-      setCurrentScreen(scanResult ? 'scanResult' : 'home');
+      setCurrentScreen(scanResult ? 'scanResult' : activePlantDetails ? 'chat' : 'home');
     } else if (currentScreen === 'scanResult') {
       setScanResult(null);
       setSelectedImage(null);
       setCurrentScreen('home');
-    } else if (currentScreen === 'chat' && scanMode === 'check_in') setCurrentScreen('home');
-    else setCurrentScreen('home');
+    } else setCurrentScreen('home');
   };
 
   const startScan = (mode: 'new_plant' | 'check_in' = 'new_plant') => {
@@ -540,6 +549,8 @@ export default function App() {
   };
 
   const openPlant = (plant: PlantData) => {
+    setScanResult(null);
+    setSelectedImage(null);
     setActivePlantDetails(plant);
     void loadChatHistory(plant.id);
     setCurrentScreen('chat');
@@ -716,12 +727,29 @@ export default function App() {
     if (currentUser) void triggerDriveSync(plants, nextChat);
   };
 
+  const removePlant = async () => {
+    if (!activePlantDetails) return;
+    const plantId = activePlantDetails.id;
+    const updated = plants.filter((p) => p.id !== plantId);
+    const { [plantId]: _removed, ...nextChat } = chatHistory;
+
+    setPlants(updated);
+    setChatHistory(nextChat);
+    setActivePlantDetails(null);
+    setCurrentScreen('home');
+    await savePlants(updated);
+    await saveChatHistory(plantId, []);
+    if (currentUser) void triggerDriveSync(updated, nextChat);
+    notify(`${activePlantDetails.name} removed from your garden.`);
+  };
+
   // ---- The four post-capture actions -------------------------------------
 
   const openPlantStatus = async (imageOverride?: string) => {
     const image = imageOverride ?? selectedImage;
     if (!image) return;
     const name = scanResult?.name ?? activePlantDetails?.name ?? 'this plant';
+    setStatusImage(image);
     setCurrentScreen('status');
     setIsStatusLoading(true);
     setStatusError(null);
@@ -730,8 +758,9 @@ export default function App() {
     if (result.ok) {
       const assessed: PlantStatus = { ...result.data, assessedAt: Date.now() };
       setStatus(assessed);
-      // Persist onto the plant when it is already in the garden.
-      if (activePlantDetails) {
+      // Persist onto the plant only when the check was opened from that plant,
+      // not from a fresh scan of something else.
+      if (activePlantDetails && !scanResult) {
         const updated = plants.map((p) =>
           p.id === activePlantDetails.id ? { ...p, status: assessed } : p,
         );
@@ -801,8 +830,8 @@ export default function App() {
     setLocation(loc);
     await runNurserySearch(loc, radiusKm);
 
-    const name = species?.scientificName ?? activeSpecies?.scientificName;
-    if (name) await loadPrice(name, loc);
+    // Opened from the sidebar there is no species, so there is nothing to price.
+    if (species) await loadPrice(species.scientificName, loc);
   };
 
   const submitPlace = async (query: string) => {
@@ -955,6 +984,7 @@ export default function App() {
     a.download = `flora_ai_backup_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    notify('Garden exported.');
   };
 
   const handleImportBackup = (file: File) => {
@@ -962,10 +992,9 @@ export default function App() {
     reader.onload = async (e) => {
       try {
         const content = JSON.parse(e.target?.result as string);
-        if (Array.isArray(content.plants)) {
-          setPlants(content.plants);
-          await savePlants(content.plants);
-        }
+        if (!Array.isArray(content?.plants)) throw new Error('Not a Flora export');
+        setPlants(content.plants);
+        await savePlants(content.plants);
         if (content.chatHistory) {
           setChatHistory(content.chatHistory);
           for (const [pId, hist] of Object.entries(content.chatHistory)) {
@@ -978,9 +1007,10 @@ export default function App() {
         if (content.theme) {
           void updateTheme(content.theme);
         }
-        alert('Backup restored successfully!');
+        const count = content.plants.length;
+        notify(`Imported ${count} plant${count === 1 ? '' : 's'}.`);
       } catch {
-        alert('Could not read backup file. Please select a valid Flora AI JSON file.');
+        notify("That file isn't a Flora export.", 'danger');
       }
     };
     reader.readAsText(file);
@@ -1008,297 +1038,277 @@ export default function App() {
   const handleSignOut = async () => {
     await logout();
     await window.flora.auth.clearTokens();
+    setCurrentUser(null);
     setLastDriveSync(null);
+    setDriveSyncError(null);
     setAuthError(null);
   };
 
   const resetLocalData = async () => {
-    if (!confirm('Reset Flora AI and wipe local data on this computer?')) return;
     // Every provider slot, plus the pre-migration one in case it lingers.
     for (const provider of AI_PROVIDERS) {
       await window.flora.secrets.clear(keyNameFor(provider.id));
     }
     await window.flora.secrets.clear(LEGACY_KEY_SECRET);
+    await window.flora.auth.clearTokens();
+    await logout();
+    await clearAllData();
     localStorage.clear();
     window.location.reload();
   };
 
+  /** The newest check-in photo, which a health check should look at. */
+  const latestPhoto = (plant: PlantData): string => {
+    const newest = [...(plant.checkIns ?? [])].sort(
+      (a, b) => (parseDateId(b.dateId)?.getTime() ?? 0) - (parseDateId(a.dateId)?.getTime() ?? 0),
+    )[0];
+    return newest?.imageUrl ?? plant.imageUrl;
+  };
+
+  const section: Section =
+    currentScreen === 'settings'
+      ? 'settings'
+      : currentScreen === 'nurseries'
+        ? 'nurseries'
+        : currentScreen === 'scanner'
+          ? scanMode === 'check_in'
+            ? 'garden'
+            : 'identify'
+          : scanResult && ['scanResult', 'status', 'wild'].includes(currentScreen)
+            ? 'identify'
+            : 'garden';
+
+  const navigate = (target: Section) => {
+    if (target === 'garden') setCurrentScreen('home');
+    else if (target === 'identify') startScan('new_plant');
+    else if (target === 'nurseries') {
+      setActiveSpecies(null);
+      void openNurseries();
+    } else setCurrentScreen('settings');
+  };
+
   if (isInitializing) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+      <div className="flex h-full items-center justify-center text-accent">
+        <Spinner size={22} />
       </div>
     );
   }
 
-  return (
-    <div className={`flex justify-center min-h-screen bg-bg-main font-sans text-text-main ${appTheme}`}>
-      <div className="w-full max-w-xl md:max-w-2xl bg-bg-main min-h-screen relative flex flex-col overflow-hidden text-text-main dynamic-border border-y-0 sm:border-y border-x dynamic-shadow">
-        {!hasOnboarded ? (
-          <OnboardingScreen
-            onAccept={completeOnboarding}
-            onInstantSignIn={handleInstantSignIn}
-            onEmailSignIn={handleEmailSignIn}
-            onEmailSignUp={handleEmailSignUp}
-            isSigningIn={isSigningIn}
-            authError={authError}
-            currentUser={currentUser}
-          />
-        ) : (
-          <>
-            {currentScreen !== 'home' && currentScreen !== 'scanner' && (
-              <div className="px-5 py-4 flex items-center gap-3 shrink-0 sticky top-0 bg-bg-main/90 backdrop-blur-md z-30 border-b border-[var(--color-accent)]/15">
-                <button
-                  onClick={goBack}
-                  className="w-10 h-10 bg-bg-card rounded-full flex items-center justify-center dynamic-border shadow-sm hover:brightness-110 active:scale-95 transition-all"
-                >
-                  <ChevronLeft size={22} className="text-text-main" />
-                </button>
-                <h2 className="text-lg font-bold text-text-main capitalize tracking-tight">
-                  {currentScreen === 'settings' ? 'Application Settings' : currentScreen}
-                </h2>
-              </div>
-            )}
-
-            {!isOnline && (
-              <div className="px-4 py-2 flex items-center gap-2 bg-amber-500/15 border-b border-amber-500/30 text-amber-500 text-xs font-bold z-30">
-                <WifiOff size={14} />
-                Offline — identification, chat and nursery search need a connection.
-              </div>
-            )}
-
-            <main
-              className={`flex-1 ${
-                currentScreen === 'chat'
-                  ? 'h-[calc(100vh-70px)] pb-1 flex flex-col overflow-hidden'
-                  : currentScreen === 'home' || currentScreen === 'nurseries'
-                    ? 'overflow-y-auto pb-28 custom-scrollbar'
-                    : 'overflow-y-auto pb-8 custom-scrollbar'
-              } z-10 w-full relative`}
-            >
-              <AnimatePresence mode="wait">
-                {currentScreen === 'home' && (
-                  <HomeScreen
-                    key="home"
-                    plants={plants}
-                    streak={streak}
-                    appTheme={appTheme}
-                    lastCheckInDate={lastCheckInDate}
-                    hasApiKey={Boolean(userApiKey)}
-                    driveSyncing={driveSyncing}
-                    lastDriveSync={lastDriveSync}
-                    onOpenSettings={() => setCurrentScreen('settings')}
-                    onOpenPlant={openPlant}
-                  />
-                )}
-
-                {currentScreen === 'scanner' && (
-                  <ScannerScreen
-                    key="scanner"
-                    selectedImage={selectedImage}
-                    isScanning={isScanning}
-                    hasApiKey={Boolean(userApiKey)}
-                    scanError={scanError}
-                    onCaptured={(dataUrl) => {
-                      setSelectedImage(dataUrl);
-                      setScanError(null);
-                    }}
-                    onPickFile={(e) => handleCameraCapture(e, scanMode)}
-                    onAnalyze={processImage}
-                    onBack={goBack}
-                  />
-                )}
-
-                {currentScreen === 'scanResult' && scanResult && selectedImage && (
-                  <ScanResultScreen
-                    key="scanResult"
-                    image={selectedImage}
-                    result={scanResult}
-                    showToxicAlert={showToxicAlert}
-                    isSaved={plants.some((p) => p.name === scanResult.name && p.imageUrl === selectedImage)}
-                    onDismissToxicAlert={() => setShowToxicAlert(false)}
-                    onAddToGarden={addToGarden}
-                    onPlantStatus={openPlantStatus}
-                    onWhereToBuy={() =>
-                      openNurseries({
-                        name: scanResult.name,
-                        scientificName: scanResult.scientificName,
-                      })
-                    }
-                    onFindInWild={() =>
-                      openWild({
-                        name: scanResult.name,
-                        scientificName: scanResult.scientificName,
-                      })
-                    }
-                    onBackToScanner={() => startScan('new_plant')}
-                  />
-                )}
-
-                {currentScreen === 'status' && (
-                  <StatusScreen
-                    key="status"
-                    plantName={scanResult?.name ?? activePlantDetails?.name ?? 'This plant'}
-                    status={status}
-                    isLoading={isStatusLoading}
-                    error={statusError}
-                    onRetry={openPlantStatus}
-                  />
-                )}
-
-                {currentScreen === 'nurseries' && (
-                  <NurseryScreen
-                    key="nurseries"
-                    speciesName={activeSpecies?.scientificName ?? null}
-                    location={location}
-                    nurseries={nurseries}
-                    price={price}
-                    radiusKm={radiusKm}
-                    isLoading={isNurseryLoading}
-                    isPriceLoading={isPriceLoading}
-                    error={nurseryError}
-                    isStale={nurseriesAreStale}
-                    onSubmitPlace={submitPlace}
-                    onUseIpLocation={useIpLocation}
-                    onChangeRadius={changeRadius}
-                    onClearLocation={() => setLocation(null)}
-                    onRetry={() => location && runNurserySearch(location, radiusKm)}
-                    onOpenExternal={(url) => window.flora.openExternal(url)}
-                  />
-                )}
-
-                {currentScreen === 'wild' && activeSpecies && (
-                  <WildScreen
-                    key="wild"
-                    speciesName={activeSpecies.scientificName || activeSpecies.name}
-                    occurrences={occurrences}
-                    habitat={habitat}
-                    isLoading={isWildLoading}
-                    noWildRecords={noWildRecords}
-                    error={wildError}
-                    onRetry={() => openWild()}
-                  />
-                )}
-
-                {currentScreen === 'history' && activePlantDetails && (
-                  <HistoryScreen key="history" plant={activePlantDetails} />
-                )}
-
-                {currentScreen === 'chat' && activePlantDetails && (
-                  <ChatScreen
-                    key="chat"
-                    plant={activePlantDetails}
-                    messages={chatHistory[activePlantDetails.id] || []}
-                    chatMessage={chatMessage}
-                    isChatLoading={isChatLoading}
-                    hasApiKey={Boolean(userApiKey)}
-                    onChangeMessage={setChatMessage}
-                    onSend={sendMessage}
-                    onOpenHistory={() => setCurrentScreen('history')}
-                    onCheckInPhoto={(e) => handleCameraCapture(e, 'check_in')}
-                    onPlantStatus={() => openPlantStatus(activePlantDetails.imageUrl)}
-                    onWhereToBuy={() =>
-                      openNurseries({
-                        name: activePlantDetails.name,
-                        scientificName: activePlantDetails.scientificName ?? activePlantDetails.name,
-                      })
-                    }
-                    onFindInWild={() =>
-                      openWild({
-                        name: activePlantDetails.name,
-                        scientificName: activePlantDetails.scientificName ?? activePlantDetails.name,
-                      })
-                    }
-                    onDeleteMessage={deleteChatMessage}
-                    onClearHistory={clearChatHistory}
-                  />
-                )}
-
-                {currentScreen === 'settings' && (
-                  <SettingsScreen
-                    key="settings"
-                    apiKey={userApiKey}
-                    aiModel={aiModel}
-                    aiProvider={aiProvider}
-                    aiBaseUrl={aiBaseUrl}
-                    availableModels={availableModels}
-                    isLoadingModels={isLoadingModels}
-                    modelError={modelError}
-                    appTheme={appTheme}
-                    keyStoreError={keyStoreError}
-                    keyIsSaved={keyIsSaved}
-                    savedProviders={savedProviders}
-                    storageBackend={storageBackend}
-                    connectionResult={connectionResult}
-                    isTestingConnection={isTestingConnection}
-                    isOnline={isOnline}
-                    currentUser={currentUser}
-                    authConfigured={authConfigured}
-                    authError={authError}
-                    isSigningIn={isSigningIn}
-                    driveSyncing={driveSyncing}
-                    lastDriveSync={lastDriveSync}
-                    driveSyncError={driveSyncError}
-                    onSyncDrive={() => void triggerDriveSync()}
-                    onSignIn={handleSignIn}
-                    onSignOut={handleSignOut}
-                    onEmailSignIn={handleEmailSignIn}
-                    onEmailSignUp={handleEmailSignUp}
-                    onInstantSignIn={handleInstantSignIn}
-                    onSaveGoogleClientId={handleSaveGoogleClientId}
-                    onExportBackup={handleExportBackup}
-                    onImportBackup={handleImportBackup}
-                    onChangeApiKey={changeApiKey}
-                    onSaveApiKey={saveApiKeyNow}
-                    onChangeAiModel={(value) => void changeAiModel(value)}
-                    onChangeAiProvider={changeAiProvider}
-                    onChangeAiBaseUrl={changeAiBaseUrl}
-                    onRefreshModels={refreshModels}
-                    onTestConnection={runConnectionTest}
-                    onChangeTheme={updateTheme}
-                    onReset={resetLocalData}
-                  />
-                )}
-              </AnimatePresence>
-            </main>
-
-            {(currentScreen === 'home' || currentScreen === 'nurseries') && (
-              <nav className="absolute bottom-0 w-full bg-bg-card/95 backdrop-blur-md border-t border-[var(--color-accent)]/15 pb-safe px-10 flex justify-between h-[85px] items-start pt-3.5 z-40 dynamic-shadow">
-                <button
-                  onClick={() => setCurrentScreen('home')}
-                  className={`flex flex-col items-center gap-1.5 w-16 transition-colors ${
-                    currentScreen === 'home'
-                      ? 'text-[var(--color-accent)] font-bold'
-                      : 'text-text-muted hover:text-text-main'
-                  }`}
-                >
-                  <Leaf size={22} strokeWidth={2.5} />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Garden</span>
-                </button>
-
-                <button
-                  onClick={() => startScan('new_plant')}
-                  className="relative w-14 h-14 flex items-center justify-center -mt-7 rounded-full bg-[var(--color-accent)] text-bg-main shadow-lg border-4 border-bg-main transition transform hover:scale-105 active:scale-95"
-                >
-                  <ScanLine size={24} strokeWidth={2.5} />
-                </button>
-
-                <button
-                  onClick={() => openNurseries()}
-                  className={`flex flex-col items-center gap-1.5 w-16 transition-colors ${
-                    currentScreen === 'nurseries'
-                      ? 'text-[var(--color-accent)] font-bold'
-                      : 'text-text-muted hover:text-text-main'
-                  }`}
-                >
-                  <Store size={22} strokeWidth={2.5} />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Nurseries</span>
-                </button>
-              </nav>
-            )}
-          </>
-        )}
+  if (!hasOnboarded) {
+    return (
+      <div className="h-full">
+        <OnboardingScreen
+          onAccept={completeOnboarding}
+          onInstantSignIn={handleInstantSignIn}
+          onEmailSignIn={handleEmailSignIn}
+          onEmailSignUp={handleEmailSignUp}
+          isSigningIn={isSigningIn}
+          authError={authError}
+          currentUser={currentUser}
+        />
       </div>
+    );
+  }
+
+  const hasApiKey = Boolean(userApiKey);
+  const species = (plant: PlantData) => ({
+    name: plant.name,
+    scientificName: plant.scientificName ?? plant.name,
+  });
+
+  return (
+    <div className="flex h-full">
+      <Sidebar
+        section={section}
+        plantCount={plants.length}
+        streak={streak}
+        checkedInToday={lastCheckInDate === getTodayDateId()}
+        isOnline={isOnline}
+        isSignedIn={Boolean(currentUser)}
+        syncing={driveSyncing}
+        lastSync={lastDriveSync}
+        syncError={driveSyncError}
+        onNavigate={navigate}
+      />
+
+      <main className={`min-w-0 flex-1 ${currentScreen === 'chat' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+        <AnimatePresence mode="wait">
+          {currentScreen === 'home' && (
+            <HomeScreen
+              key="home"
+              plants={plants}
+              hasApiKey={hasApiKey}
+              onOpenSettings={() => setCurrentScreen('settings')}
+              onOpenPlant={openPlant}
+              onIdentify={() => startScan('new_plant')}
+            />
+          )}
+
+          {currentScreen === 'scanner' && (
+            <ScannerScreen
+              key="scanner"
+              mode={scanMode}
+              plantName={activePlantDetails?.name}
+              selectedImage={selectedImage}
+              isScanning={isScanning}
+              hasApiKey={hasApiKey}
+              scanError={scanError}
+              onImage={(dataUrl) => {
+                setSelectedImage(dataUrl);
+                setScanError(null);
+              }}
+              onClear={() => {
+                setSelectedImage(null);
+                setScanError(null);
+              }}
+              onAnalyze={processImage}
+              onOpenSettings={() => setCurrentScreen('settings')}
+              onBack={goBack}
+            />
+          )}
+
+          {currentScreen === 'scanResult' && scanResult && selectedImage && (
+            <ScanResultScreen
+              key="scanResult"
+              image={selectedImage}
+              result={scanResult}
+              showToxicAlert={showToxicAlert}
+              isSaved={plants.some((p) => p.name === scanResult.name && p.imageUrl === selectedImage)}
+              onDismissToxicAlert={() => setShowToxicAlert(false)}
+              onAddToGarden={addToGarden}
+              onPlantStatus={() => openPlantStatus()}
+              onWhereToBuy={() => openNurseries({ name: scanResult.name, scientificName: scanResult.scientificName })}
+              onFindInWild={() => openWild({ name: scanResult.name, scientificName: scanResult.scientificName })}
+              onBackToScanner={() => startScan('new_plant')}
+              onBack={() => startScan('new_plant')}
+            />
+          )}
+
+          {currentScreen === 'status' && (
+            <StatusScreen
+              key="status"
+              plantName={scanResult?.name ?? activePlantDetails?.name ?? 'This plant'}
+              image={statusImage}
+              status={status}
+              isLoading={isStatusLoading}
+              error={statusError}
+              onRetry={() => openPlantStatus(statusImage ?? undefined)}
+              onBack={goBack}
+            />
+          )}
+
+          {currentScreen === 'nurseries' && (
+            <NurseryScreen
+              key="nurseries"
+              speciesName={activeSpecies?.scientificName ?? null}
+              location={location}
+              nurseries={nurseries}
+              price={price}
+              radiusKm={radiusKm}
+              isLoading={isNurseryLoading}
+              isPriceLoading={isPriceLoading}
+              error={nurseryError}
+              isStale={nurseriesAreStale}
+              onSubmitPlace={submitPlace}
+              onUseIpLocation={useIpLocation}
+              onChangeRadius={changeRadius}
+              onClearLocation={() => setLocation(null)}
+              onRetry={() => location && runNurserySearch(location, radiusKm)}
+              onOpenExternal={(url) => window.flora.openExternal(url)}
+              onBack={activeSpecies ? goBack : undefined}
+            />
+          )}
+
+          {currentScreen === 'wild' && activeSpecies && (
+            <WildScreen
+              key="wild"
+              speciesName={activeSpecies.scientificName || activeSpecies.name}
+              occurrences={occurrences}
+              habitat={habitat}
+              isLoading={isWildLoading}
+              noWildRecords={noWildRecords}
+              error={wildError}
+              onRetry={() => openWild()}
+              onBack={goBack}
+            />
+          )}
+
+          {currentScreen === 'history' && activePlantDetails && (
+            <HistoryScreen key="history" plant={activePlantDetails} onBack={goBack} />
+          )}
+
+          {currentScreen === 'chat' && activePlantDetails && (
+            <PlantScreen
+              key={`plant-${activePlantDetails.id}`}
+              plant={activePlantDetails}
+              messages={chatHistory[activePlantDetails.id] || []}
+              chatMessage={chatMessage}
+              isChatLoading={isChatLoading}
+              hasApiKey={hasApiKey}
+              onChangeMessage={setChatMessage}
+              onSend={sendMessage}
+              onOpenHistory={() => setCurrentScreen('history')}
+              onCheckIn={() => startScan('check_in')}
+              onPlantStatus={() => openPlantStatus(latestPhoto(activePlantDetails))}
+              onWhereToBuy={() => openNurseries(species(activePlantDetails))}
+              onFindInWild={() => openWild(species(activePlantDetails))}
+              onDeleteMessage={deleteChatMessage}
+              onClearHistory={clearChatHistory}
+              onRemovePlant={removePlant}
+              onBack={() => setCurrentScreen('home')}
+            />
+          )}
+
+          {currentScreen === 'settings' && (
+            <SettingsScreen
+              key="settings"
+              apiKey={userApiKey}
+              aiModel={aiModel}
+              aiProvider={aiProvider}
+              aiBaseUrl={aiBaseUrl}
+              availableModels={availableModels}
+              isLoadingModels={isLoadingModels}
+              modelError={modelError}
+              appTheme={appTheme}
+              keyStoreError={keyStoreError}
+              keyIsSaved={keyIsSaved}
+              savedProviders={savedProviders}
+              storageBackend={storageBackend}
+              connectionResult={connectionResult}
+              isTestingConnection={isTestingConnection}
+              isOnline={isOnline}
+              currentUser={currentUser}
+              authConfigured={authConfigured}
+              authError={authError}
+              isSigningIn={isSigningIn}
+              driveSyncing={driveSyncing}
+              lastDriveSync={lastDriveSync}
+              driveSyncError={driveSyncError}
+              onSyncDrive={() => void triggerDriveSync()}
+              onSignIn={handleSignIn}
+              onSignOut={handleSignOut}
+              onEmailSignIn={handleEmailSignIn}
+              onEmailSignUp={handleEmailSignUp}
+              onInstantSignIn={handleInstantSignIn}
+              onSaveGoogleClientId={handleSaveGoogleClientId}
+              onExportBackup={handleExportBackup}
+              onImportBackup={handleImportBackup}
+              onChangeApiKey={changeApiKey}
+              onSaveApiKey={saveApiKeyNow}
+              onChangeAiModel={(value) => void changeAiModel(value)}
+              onChangeAiProvider={changeAiProvider}
+              onChangeAiBaseUrl={changeAiBaseUrl}
+              onRefreshModels={refreshModels}
+              onTestConnection={runConnectionTest}
+              onChangeTheme={updateTheme}
+              onReset={resetLocalData}
+            />
+          )}
+        </AnimatePresence>
+      </main>
+
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

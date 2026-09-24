@@ -1,9 +1,8 @@
-import { Compass, Globe2, Leaf, Sprout } from 'lucide-react';
-import { motion } from 'motion/react';
+import { Compass, Globe2, Leaf, RefreshCw, Sprout, type LucideIcon } from 'lucide-react';
 import type { OccurrenceSet } from '../store';
 import type { Habitat } from '../services/ai';
-import ErrorCard from '../components/ErrorCard';
 import MapView, { type MapPoint } from '../components/MapView';
+import { Button, Card, Disclaimer, Eyebrow, LoadingState, Notice, Page, PageHeader } from '../components/ui';
 
 type Props = {
   speciesName: string;
@@ -14,7 +13,18 @@ type Props = {
   noWildRecords: boolean;
   error: string | null;
   onRetry: () => void;
+  onBack: () => void;
 };
+
+function Stat({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <Card>
+      <Eyebrow>{label}</Eyebrow>
+      <p className="mt-2 whitespace-nowrap font-display text-2xl font-semibold leading-none lining-nums tabular-nums text-ink">{value}</p>
+      <p className="mt-1.5 text-[13px] text-muted">{detail}</p>
+    </Card>
+  );
+}
 
 export default function WildScreen({
   speciesName,
@@ -24,6 +34,7 @@ export default function WildScreen({
   noWildRecords,
   error,
   onRetry,
+  onBack,
 }: Props) {
   const points: MapPoint[] =
     occurrences?.records.map((r) => ({
@@ -32,109 +43,105 @@ export default function WildScreen({
       label: [r.country, r.year].filter(Boolean).join(' · '),
     })) ?? [];
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      className="px-6 pb-6 pt-2 space-y-5"
-    >
-      <div>
-        <h2 className="text-xl font-bold text-text-main leading-tight italic">{speciesName}</h2>
-        <p className="text-xs text-text-muted mt-0.5">Where it grows in the wild</p>
-      </div>
+  const topMax = Math.max(1, ...(occurrences?.topCountries.map((c) => c.count) ?? []));
 
-      {error && <ErrorCard message={error} onRetry={onRetry} />}
+  const habitatRows: { label: string; value: string; icon: LucideIcon }[] = habitat
+    ? [
+        { label: 'Native range', value: habitat.nativeRange, icon: Globe2 },
+        { label: 'Habitat', value: habitat.habitat, icon: Leaf },
+        { label: 'Season', value: habitat.season, icon: Sprout },
+        { label: 'What to look for', value: habitat.whatToLookFor, icon: Compass },
+      ]
+    : [];
+
+  return (
+    <Page wide className="space-y-7">
+      <PageHeader title="In the wild" subtitle={<span className="italic">{speciesName}</span>} onBack={onBack} />
+
+      {error && (
+        <Notice
+          tone="danger"
+          title="Couldn't load sightings"
+          action={
+            <Button size="sm" icon={RefreshCw} onClick={onRetry}>
+              Retry
+            </Button>
+          }
+        >
+          {error}
+        </Notice>
+      )}
 
       {isLoading && (
-        <div className="bg-bg-card dynamic-border rounded-[var(--radius-dynamic)] p-8 flex flex-col items-center gap-3">
-          <div className="w-6 h-6 border-2 border-[var(--color-accent)]/30 border-t-[var(--color-accent)] rounded-full animate-spin" />
-          <p className="text-sm text-text-muted font-medium">Searching GBIF records…</p>
-        </div>
+        <Card>
+          <LoadingState label="Searching GBIF for recorded sightings…" />
+        </Card>
       )}
 
       {/* Cultivated houseplants routinely have zero wild records; this is the
           common case, not an edge case, and must never render a blank map. */}
       {!isLoading && noWildRecords && (
-        <div className="bg-bg-card dynamic-border rounded-[var(--radius-dynamic)] p-6 text-center space-y-3">
-          <Sprout size={28} className="mx-auto text-[var(--color-accent)]" />
-          <p className="text-sm font-bold text-text-main">No verified wild records in GBIF</p>
-          <p className="text-sm text-text-muted leading-relaxed">
-            This species is primarily cultivated. Its native range is described below.
-          </p>
-        </div>
+        <Notice icon={Sprout} title="No wild sightings on record">
+          This plant is mostly grown in cultivation, so GBIF has no verified wild records. Its native range is
+          described below.
+        </Notice>
       )}
 
       {!isLoading && occurrences && !noWildRecords && (
-        <>
-          <MapView points={points} />
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-bg-card dynamic-border rounded-[var(--radius-dynamic)] p-4">
-              <p className="text-[10px] text-[var(--color-accent)] font-bold uppercase tracking-widest">
-                Recorded sightings
-              </p>
-              <p className="text-xl font-bold text-text-main mt-1">
-                {occurrences.total.toLocaleString()}
-              </p>
-              <p className="text-[10px] text-text-muted mt-0.5">
-                {occurrences.records.length} plotted
-              </p>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+          <MapView points={points} className="h-[420px] w-full overflow-hidden rounded-2xl border border-line" />
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <Stat
+                label="Sightings"
+                value={occurrences.total.toLocaleString()}
+                detail={`${occurrences.records.length} on the map`}
+              />
+              <Stat
+                label="Nearest"
+                value={occurrences.nearestKm === undefined ? '—' : `${Math.round(occurrences.nearestKm).toLocaleString()} km`}
+                detail={occurrences.nearestKm === undefined ? 'Set a location in Nurseries' : 'from you'}
+              />
             </div>
-            <div className="bg-bg-card dynamic-border rounded-[var(--radius-dynamic)] p-4">
-              <p className="text-[10px] text-[var(--color-accent)] font-bold uppercase tracking-widest">
-                Nearest to you
-              </p>
-              <p className="text-xl font-bold text-text-main mt-1">
-                {occurrences.nearestKm === undefined
-                  ? '—'
-                  : `${Math.round(occurrences.nearestKm).toLocaleString()} km`}
-              </p>
-              <p className="text-[10px] text-text-muted mt-0.5">
-                {occurrences.nearestKm === undefined ? 'Set a location' : 'from your location'}
-              </p>
-            </div>
+            {occurrences.topCountries.length > 0 && (
+              <Card>
+                <Eyebrow className="mb-3">Most sightings</Eyebrow>
+                <ul className="space-y-2.5">
+                  {occurrences.topCountries.map((c) => (
+                    <li key={c.country} className="space-y-1">
+                      <div className="flex justify-between text-[13px]">
+                        <span className="truncate text-ink">{c.country}</span>
+                        <span className="ml-3 shrink-0 tabular-nums text-muted">{c.count.toLocaleString()}</span>
+                      </div>
+                      <div className="h-1 overflow-hidden rounded-full bg-sunken">
+                        <div className="h-full rounded-full bg-accent" style={{ width: `${(c.count / topMax) * 100}%` }} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
           </div>
-
-          {occurrences.topCountries.length > 0 && (
-            <div className="bg-bg-card dynamic-border rounded-[var(--radius-dynamic)] p-4 space-y-2">
-              <p className="text-[10px] text-[var(--color-accent)] font-bold uppercase tracking-widest flex items-center gap-1.5">
-                <Globe2 size={12} /> Most sightings
-              </p>
-              {occurrences.topCountries.map((c) => (
-                <div key={c.country} className="flex justify-between items-center text-sm">
-                  <span className="text-text-main truncate">{c.country}</span>
-                  <span className="text-text-muted font-bold shrink-0 ml-3">{c.count}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
+        </div>
       )}
 
       {habitat && (
-        <div className="bg-bg-card dynamic-border rounded-[var(--radius-dynamic)] divide-y divide-text-muted/10">
-          {[
-            { label: 'Native range', value: habitat.nativeRange, icon: Globe2 },
-            { label: 'Habitat', value: habitat.habitat, icon: Leaf },
-            { label: 'Season', value: habitat.season, icon: Sprout },
-            { label: 'What to look for', value: habitat.whatToLookFor, icon: Compass },
-          ].map(({ label, value, icon: Icon }) => (
-            <div key={label} className="p-4 flex gap-3 items-start">
-              <Icon size={18} className="text-[var(--color-accent)] shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-text-main">{label}</p>
-                <p className="text-sm text-text-muted leading-relaxed mt-0.5">{value}</p>
-              </div>
-            </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {habitatRows.map(({ label, value, icon: Icon }) => (
+            <Card key={label}>
+              <p className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold text-ink">
+                <Icon size={15} className="text-accent" /> {label}
+              </p>
+              <p className="text-sm leading-relaxed text-muted">{value}</p>
+            </Card>
           ))}
         </div>
       )}
 
-      <p className="text-[10px] text-text-muted opacity-80 leading-relaxed text-center px-2">
-        Occurrence data from GBIF. Range and habitat notes are AI-generated. Never forage or handle a
-        wild plant on this basis alone.
-      </p>
-    </motion.div>
+      <Disclaimer>
+        Sightings from GBIF. Range and habitat notes are written by AI. Never forage, eat or handle a wild plant on
+        this basis alone.
+      </Disclaimer>
+    </Page>
   );
 }

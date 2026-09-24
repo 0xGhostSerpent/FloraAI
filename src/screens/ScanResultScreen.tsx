@@ -1,6 +1,16 @@
-import { AlertTriangle, Activity, Ban, Camera, Leaf, MapPin, Store } from 'lucide-react';
-import { motion } from 'motion/react';
+import {
+  Activity,
+  AlertTriangle,
+  Ban,
+  Check,
+  MapPin,
+  Plus,
+  ScanLine,
+  Store,
+  type LucideIcon,
+} from 'lucide-react';
 import type { Identification } from '../services/ai';
+import { Badge, Button, Card, Dialog, Eyebrow, Notice, Page, PageHeader } from '../components/ui';
 
 type Props = {
   image: string;
@@ -12,37 +22,51 @@ type Props = {
   onPlantStatus: () => void;
   onWhereToBuy: () => void;
   onFindInWild: () => void;
-  onBackToScanner?: () => void;
+  onBackToScanner: () => void;
+  onBack: () => void;
 };
 
-type ActionProps = {
-  icon: typeof Leaf;
+function ActionTile({
+  icon: Icon,
+  title,
+  detail,
+  onClick,
+}: {
+  icon: LucideIcon;
   title: string;
   detail: string;
   onClick: () => void;
-  primary?: boolean;
-  disabled?: boolean;
-};
-
-function ActionCard({ icon: Icon, title, detail, onClick, primary, disabled }: ActionProps) {
+}) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      disabled={disabled}
-      className={`w-full text-left p-4 rounded-[var(--radius-dynamic)] transition-all active:scale-[0.98] flex items-center gap-4 disabled:opacity-50 ${
-        primary
-          ? 'bg-[var(--color-accent)] text-bg-main shadow-lg'
-          : 'bg-bg-card text-text-main dynamic-border hover:brightness-95'
-      }`}
+      className="group flex flex-col gap-3 rounded-xl border border-line bg-surface p-4 text-left shadow-card transition-colors hover:border-line-strong hover:bg-sunken"
     >
-      <Icon size={22} className="shrink-0" />
-      <span className="flex-1 min-w-0">
-        <span className="block font-bold text-sm leading-tight">{title}</span>
-        <span className={`block text-xs mt-0.5 ${primary ? 'opacity-80' : 'text-text-muted'}`}>
-          {detail}
-        </span>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
+        <Icon size={18} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-ink">{title}</span>
+        <span className="mt-0.5 block text-[13px] leading-snug text-muted">{detail}</span>
       </span>
     </button>
+  );
+}
+
+function ConfidenceMeter({ value }: { value: number }) {
+  const percent = Math.round(Math.max(0, Math.min(1, value)) * 100);
+  const label = percent >= 85 ? 'High confidence' : percent >= 60 ? 'Fair confidence' : 'Low confidence';
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between text-[13px]">
+        <span className="font-medium text-ink">{label}</span>
+        <span className="tabular-nums text-muted">{percent}%</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-sunken">
+        <div className="h-full rounded-full bg-accent" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
   );
 }
 
@@ -57,164 +81,113 @@ export default function ScanResultScreen({
   onWhereToBuy,
   onFindInWild,
   onBackToScanner,
+  onBack,
 }: Props) {
-  // Non-plant rejection screen: only botanic specimens are accepted.
+  // Only plants can be saved or searched for, so anything else ends here.
   if (result.isPlant === false) {
-    const detectedName = result.detectedObject || result.name || 'Non-plant object';
+    const detected = result.detectedObject || result.name || 'something else';
     return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0 }}
-        className="px-6 pb-6 pt-2 space-y-5"
-      >
-        <div className="bg-bg-card dynamic-border rounded-[var(--radius-dynamic)] p-5 text-center flex flex-col items-center space-y-4 shadow-sm">
-          <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500">
-            <Ban size={32} />
-          </div>
-
-          <div className="relative w-32 h-32 rounded-2xl overflow-hidden dynamic-border shadow-md">
-            <img src={image} alt="Scanned item" className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-black/20" />
-          </div>
-
-          <div>
-            <span className="inline-block text-[11px] font-bold uppercase tracking-widest bg-amber-500/15 text-amber-500 px-3 py-1 rounded-full mb-2">
-              Not a Plant / Botanical Specimen
-            </span>
-            <h2 className="text-xl font-bold text-text-main leading-snug">
-              {detectedName}
-            </h2>
-            <p className="text-xs text-text-muted mt-2 leading-relaxed max-w-xs mx-auto">
+      <Page className="space-y-7">
+        <PageHeader title="Not a plant" onBack={onBack} />
+        <Card className="flex flex-col items-center gap-6 px-8 py-10 text-center sm:flex-row sm:text-left">
+          <img src={image} alt="" className="h-36 w-36 shrink-0 rounded-xl object-cover" />
+          <div className="min-w-0 space-y-2">
+            <Badge tone="warn" icon={Ban}>
+              Detected: {detected}
+            </Badge>
+            <p className="text-sm leading-relaxed text-muted">
               {result.rejectionReason ||
-                'Flora AI is specialized strictly for identifying, caring for, and finding plants, trees, and flowers. Non-botanical items cannot be added to your garden or searched in nurseries.'}
+                'Flora only identifies plants, trees and flowers. Try a photo where the plant fills most of the frame.'}
             </p>
+            <div className="pt-2">
+              <Button variant="primary" icon={ScanLine} onClick={onBackToScanner}>
+                Try another photo
+              </Button>
+            </div>
           </div>
-
-          <button
-            onClick={onBackToScanner}
-            className="w-full bg-[var(--color-accent)] text-bg-main py-3.5 rounded-[var(--radius-dynamic)] font-bold text-sm shadow-md hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2"
-          >
-            <Camera size={18} />
-            Scan a Plant Instead
-          </button>
-        </div>
-      </motion.div>
+        </Card>
+      </Page>
     );
   }
 
-  // The toxicity warning must be acknowledged before anything else is offered.
-  if (showToxicAlert) {
-    return (
-      <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        className="px-6 pb-6 pt-2"
-      >
-        <div className="bg-red-500 rounded-[var(--radius-dynamic)] shadow-lg p-6 border border-black/10">
-          <div className="flex items-center gap-3 mb-4">
-            <AlertTriangle size={32} className="text-white shrink-0 animate-pulse" />
-            <h2 className="text-2xl font-black text-white leading-tight uppercase tracking-tight">
-              Toxicity Alert
-            </h2>
-          </div>
-          <div className="text-red-100 mb-6 bg-black/20 p-4 rounded-xl border border-white/10">
-            <p className="text-xs uppercase tracking-widest font-bold text-red-200 mb-1 opacity-80">
-              Assessment Details
-            </p>
-            <p className="font-medium text-sm leading-relaxed">
-              {result.toxicityDetails || 'This plant contains toxic properties.'}
-            </p>
-          </div>
-          <button
-            onClick={onDismissToxicAlert}
-            className="w-full bg-white text-red-600 py-4 rounded-[var(--radius-dynamic)] font-bold shadow-lg active:scale-95 transition-transform text-lg"
-          >
-            I Understand
-          </button>
-        </div>
-      </motion.div>
-    );
-  }
+  const confidence = typeof result.confidence === 'number' ? result.confidence : null;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      className="px-6 pb-6 pt-2 space-y-5"
-    >
-      <div className="flex gap-4 items-start">
-        <img
-          src={image}
-          alt={result.name}
-          className="w-24 h-24 rounded-[var(--radius-dynamic)] object-cover dynamic-border shrink-0"
-        />
-        <div className="min-w-0 flex-1">
-          <h2 className="text-xl font-bold text-text-main leading-tight">{result.name}</h2>
-          <p className="text-xs text-text-muted italic mt-0.5 truncate">{result.scientificName}</p>
-          <div className="flex items-center gap-2 mt-2 flex-wrap">
-            {typeof result.confidence === 'number' && (
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-[var(--color-accent)]/10 text-[var(--color-accent)] px-2 py-1 rounded-md">
-                {Math.round(result.confidence * 100)}% confident
-              </span>
+    <Page wide className="space-y-7">
+      <PageHeader title="Identification" onBack={onBack} backLabel="Identify another" />
+
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
+        <div className="space-y-4">
+          <img src={image} alt={result.name} className="aspect-[4/3] w-full rounded-2xl object-cover shadow-card" />
+          {confidence !== null && <ConfidenceMeter value={confidence} />}
+        </div>
+
+        <div className="space-y-6">
+          <div>
+            <h2 className="font-display text-[34px] font-semibold leading-tight tracking-[-0.015em] text-ink">
+              {result.name}
+            </h2>
+            {result.scientificName && <p className="mt-0.5 text-[15px] italic text-muted">{result.scientificName}</p>}
+          </div>
+
+          {result.isToxic && (
+            <Notice tone="danger" title="Toxic">
+              {result.toxicityDetails || 'Keep away from children and pets.'}
+            </Notice>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={isSaved ? 'soft' : 'primary'}
+              size="lg"
+              icon={isSaved ? Check : Plus}
+              disabled={isSaved}
+              onClick={onAddToGarden}
+            >
+              {isSaved ? 'In your garden' : 'Add to garden'}
+            </Button>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <ActionTile icon={Activity} title="Health check" detail="Water, leaves and light" onClick={onPlantStatus} />
+            <ActionTile icon={Store} title="Where to buy" detail="Nearby nurseries and prices" onClick={onWhereToBuy} />
+            <ActionTile icon={MapPin} title="In the wild" detail="Sightings and native range" onClick={onFindInWild} />
+          </div>
+
+          <div className="space-y-5 border-t border-line pt-6">
+            {result.healthStatus && (
+              <div>
+                <Eyebrow className="mb-1.5">First look</Eyebrow>
+                <p className="text-sm leading-relaxed text-ink">{result.healthStatus}</p>
+              </div>
             )}
-            {result.isToxic && (
-              <span className="inline-flex items-center gap-1 bg-red-500/10 text-red-500 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border border-red-500/20">
-                <AlertTriangle size={11} /> Toxic
-              </span>
+            {result.careInstructions && (
+              <div>
+                <Eyebrow className="mb-1.5">Care</Eyebrow>
+                <p className="text-sm leading-relaxed text-ink">{result.careInstructions}</p>
+              </div>
             )}
           </div>
         </div>
       </div>
 
-      <div className="bg-bg-card dynamic-border rounded-[var(--radius-dynamic)] p-4">
-        <p className="text-[10px] text-[var(--color-accent)] font-bold uppercase tracking-widest mb-1">
-          Health assessment
-        </p>
-        <p className="text-sm text-text-muted leading-relaxed">{result.healthStatus}</p>
-      </div>
-
-      <div className="space-y-2.5">
-        <p className="text-[10px] text-text-muted font-bold uppercase tracking-widest">
-          What would you like to do?
-        </p>
-
-        <ActionCard
-          icon={Leaf}
-          title={isSaved ? 'Saved to your garden' : 'Add to Garden'}
-          detail={isSaved ? 'Already tracking this plant' : 'Track it and check in over time'}
-          onClick={onAddToGarden}
-          primary={!isSaved}
-          disabled={isSaved}
-        />
-        <ActionCard
-          icon={Activity}
-          title="Plant Status"
-          detail="Hydration, leaves, light, and what to do next"
-          onClick={onPlantStatus}
-        />
-        <ActionCard
-          icon={Store}
-          title="Where to Buy"
-          detail="Nearby nurseries, estimated price, and directions"
-          onClick={onWhereToBuy}
-        />
-        <ActionCard
-          icon={MapPin}
-          title="Find in the Wild"
-          detail="Real recorded sightings and native range"
-          onClick={onFindInWild}
-        />
-      </div>
-
-      <div className="bg-bg-card dynamic-border rounded-[var(--radius-dynamic)] p-4">
-        <p className="text-[10px] text-[var(--color-accent)] font-bold uppercase tracking-widest mb-1">
-          Care
-        </p>
-        <p className="text-sm text-text-muted leading-relaxed">{result.careInstructions}</p>
-      </div>
-    </motion.div>
+      {/* A toxic plant must be acknowledged before anything else is offered. */}
+      <Dialog
+        open={showToxicAlert}
+        onClose={onDismissToxicAlert}
+        dismissible={false}
+        tone="danger"
+        icon={AlertTriangle}
+        title={`${result.name} is toxic`}
+        footer={
+          <Button variant="danger" onClick={onDismissToxicAlert}>
+            I understand
+          </Button>
+        }
+      >
+        {result.toxicityDetails || 'This plant is harmful if eaten or handled carelessly.'} Keep it out of reach of
+        children and pets.
+      </Dialog>
+    </Page>
   );
 }
-
